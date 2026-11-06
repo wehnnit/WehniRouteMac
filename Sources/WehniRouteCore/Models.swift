@@ -22,6 +22,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
     case openrouter
     case ollama
     case simulation
+    case talkNova = "talknova"
     case custom
 
     public var id: String { rawValue }
@@ -35,6 +36,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .openrouter: return "OpenRouter"
         case .ollama: return "Ollama"
         case .simulation: return "Simulation"
+        case .talkNova: return "TalkNova"
         case .custom: return "Custom endpoint"
         }
     }
@@ -48,6 +50,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .openrouter: return "One key, many models"
         case .ollama: return "Local, no key, no egress"
         case .simulation: return "Offline demo, no key"
+        case .talkNova: return "TalkNova catalog with your personal key"
         case .custom: return "Any OpenAI-compatible API"
         }
     }
@@ -61,6 +64,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .openrouter: return "https://openrouter.ai/api/v1"
         case .ollama: return "http://127.0.0.1:11434/v1"
         case .simulation: return "simulation://local"
+        case .talkNova: return "https://talknova.site/v1"
         case .custom: return "https://"
         }
     }
@@ -78,6 +82,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .openrouter: return "openrouter/auto"
         case .ollama: return "llama3.1"
         case .simulation: return "sim-echo"
+        case .talkNova: return "nova-spark"
         case .custom: return ""
         }
     }
@@ -91,6 +96,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .openrouter: return 200_000
         case .ollama: return 131_072
         case .simulation: return 128_000
+        case .talkNova: return 128_000
         case .custom: return 128_000
         }
     }
@@ -100,7 +106,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .anthropic: return 3.0
         case .openai: return 0.15
         case .groq, .google, .ollama, .simulation: return 0
-        case .openrouter, .custom: return nil
+        case .openrouter, .talkNova, .custom: return nil
         }
     }
 
@@ -109,14 +115,14 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .anthropic: return 15.0
         case .openai: return 0.60
         case .groq, .google, .ollama, .simulation: return 0
-        case .openrouter, .custom: return nil
+        case .openrouter, .talkNova, .custom: return nil
         }
     }
 
     public var defaultModelIsFree: Bool {
         switch self {
         case .groq, .google, .ollama, .simulation: return true
-        case .anthropic, .openai, .openrouter, .custom: return false
+        case .anthropic, .openai, .openrouter, .talkNova, .custom: return false
         }
     }
 
@@ -140,6 +146,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .openrouter: return "arrow.triangle.branch"
         case .ollama: return "desktopcomputer"
         case .simulation: return "flask.fill"
+        case .talkNova: return "bubble.left.and.bubble.right.fill"
         case .custom: return "slider.horizontal.3"
         }
     }
@@ -153,13 +160,14 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
         case .openrouter: return 0x8B5CF6
         case .ollama: return 0xE5E7EB
         case .simulation: return 0xFBBF24
+        case .talkNova: return 0x38BDF8
         case .custom: return 0x5EEAD4
         }
     }
 
     /// Kinds shown first in the add-provider grid.
     public static var addable: [ProviderKind] {
-        [.anthropic, .openai, .groq, .google, .openrouter, .ollama, .simulation, .custom]
+        [.anthropic, .openai, .groq, .google, .openrouter, .ollama, .talkNova, .simulation, .custom]
     }
 }
 

@@ -155,7 +155,7 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .deepSeek:
             return "WehniRoute exports DEEPSEEK_BASE_URL and DEEPSEEK_API_KEY, then opens the DeepSeek Harness web profile. The gateway accepts endpoint paths with or without the /v1 prefix, so dsh connects either way; pick the DeepSeek provider if dsh asks."
         case .talkNova:
-            return "TalkNova is a desktop app whose backend reads TALKNOVA_CHAT_URL and TALKNOVA_MODELS_URL environment overrides. WehniRoute launches /Applications/TalkNova.app directly with those set to the local gateway, so chat and the model picker run through WehniRoute. TalkNova sends its own key as a Bearer token, so keep Require API key off for this gateway, or TalkNova will be rejected. Your TalkNova account and data stay untouched."
+            return "TalkNova's desktop client is hardwired to its own cloud service, so WehniRoute cannot capture its chat traffic. Launch here simply opens the app. To actually route TalkNova models through WehniRoute, connect TalkNova as a provider: copy your personal tn-live key from TalkNova → Settings → API access, then use Connect provider → TalkNova. TalkNova's catalog then joins the routing ladder for every other harness."
         }
     }
 }
@@ -461,11 +461,11 @@ final class HarnessLauncher: ObservableObject {
             environment["DEEPSEEK_MODEL"] = "auto"
 
         case .talkNova:
-            // TalkNova's backend honors these endpoint overrides instead of its
-            // talknova.site defaults. Only the URLs are overridden; TalkNova
-            // keeps using its own stored key for the Bearer header.
-            environment["TALKNOVA_CHAT_URL"] = "\(base)/v1/chat/completions"
-            environment["TALKNOVA_MODELS_URL"] = "\(base)/v1/models"
+            // TalkNova's desktop client talks only to its own cloud; there is
+            // no endpoint override to set. Launching here just opens the app.
+            // The real integration is the TalkNova provider preset, which
+            // routes its catalog through the gateway for other harnesses.
+            break
         }
 
         return HarnessLaunchSpec(

@@ -240,6 +240,7 @@ public enum Router {
             case .anthropic, .openai, .google: return 0.9
             case .groq, .openrouter: return 0.8
             case .ollama, .simulation: return 0.6
+            case .talkNova: return 0.75
             case .custom: return 0.7
             }
         }
@@ -254,6 +255,7 @@ public enum Router {
             case .groq: return 0.70
             case .custom: return 0.72
             case .ollama: return 0.60
+            case .talkNova: return 0.76
             case .simulation: return 0.75
             }
         case .reasoning:
@@ -265,6 +267,7 @@ public enum Router {
             case .groq: return 0.78
             case .custom: return 0.70
             case .ollama: return 0.58
+            case .talkNova: return 0.71
             case .simulation: return 0.70
             }
         case .writing:
@@ -276,11 +279,13 @@ public enum Router {
             case .groq: return 0.75
             case .custom: return 0.70
             case .ollama: return 0.62
+            case .talkNova: return 0.73
             case .simulation: return 0.72
             }
         case .fast:
             switch kind {
             case .groq: return 1.0
+            case .talkNova: return 0.80
             case .simulation: return 0.98
             case .google: return 0.90
             case .openai: return 0.86
@@ -298,6 +303,7 @@ public enum Router {
             case .groq: return 0.70
             case .custom: return 0.60
             case .ollama: return 0.50
+            case .talkNova: return 0.55
             case .simulation: return 0.40
             }
         case .unknown:

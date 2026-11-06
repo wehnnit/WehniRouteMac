@@ -616,28 +616,25 @@ final class AppStore: ObservableObject {
     }
 
     private func modelsPayload() -> JSONValue {
-        var data: [JSONValue] = [
-            .object([
-                "id": .string("auto"),
-                "object": .string("model"),
-                "owned_by": .string("wehni-route"),
-                "wehni": .object(["type": .string("router-model")]),
-            ])
-        ]
-        for model in config.enabledModels {
-            data.append(.object([
-                "id": .string(model.modelID),
-                "object": .string("model"),
-                "owned_by": .string(model.providerID),
-                "wehni": .object([
-                    "type": .string("configured"),
-                    "displayName": .string(model.displayName),
-                    "contextWindow": .num(model.contextWindow),
-                    "free": .bool(model.isFree),
-                ]),
-            ]))
-        }
-        return .object(["object": .string("list"), "data": .array(data)])
+        // Clients only ever see the router model. Every harness model picker
+        // therefore shows WehniRoute Auto instead of upstream model IDs; the
+        // concrete catalog stays in Models and the trace log.
+        return .object([
+            "object": .string("list"),
+            "data": .array([
+                .object([
+                    "id": .string("auto"),
+                    "object": .string("model"),
+                    "name": .string("WehniRoute Auto"),
+                    "display_name": .string("WehniRoute Auto"),
+                    "owned_by": .string("wehni-route"),
+                    "wehni": .object([
+                        "type": .string("router-model"),
+                        "displayName": .string("WehniRoute Auto"),
+                    ]),
+                ])
+            ]),
+        ])
     }
 
     private func execute(
@@ -759,13 +756,19 @@ final class AppStore: ObservableObject {
                 trace.responsePreview = String(response.text.prefix(240))
                 record(trace)
 
+                // Present the gateway, not the upstream, to clients: every
+                // harness UI shows the route as WehniRoute Auto. The trace log
+                // keeps the concrete provider and model that answered.
+                var branded = response
+                branded.model = "auto"
+
                 if request.stream {
                     let frames = endpoint == .openAI
-                        ? response.openAIStreamFrames()
-                        : response.anthropicStreamFrames()
+                        ? branded.openAIStreamFrames()
+                        : branded.anthropicStreamFrames()
                     return .stream(frames, contentType: "text/event-stream; charset=utf-8")
                 }
-                return .json(200, endpoint == .openAI ? response.openAIBody() : response.anthropicBody())
+                return .json(200, endpoint == .openAI ? branded.openAIBody() : branded.anthropicBody())
 
             case .httpError(let status, let message, let latency):
                 recordHealth(providerID: provider.id, success: false, latency: latency, status: status, message: message)
