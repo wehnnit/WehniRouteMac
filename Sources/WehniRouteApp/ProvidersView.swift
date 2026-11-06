@@ -1,0 +1,382 @@
+import SwiftUI
+import WehniRouteCore
+
+struct ProvidersView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var pendingRemoval: ProviderConfig?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScreenHeader(
+                eyebrow: "Connections",
+                title: "Providers",
+                subtitle: "Connect the models you already trust. WehniRoute keeps every key in the macOS Keychain and routes through a single local endpoint."
+            ) {
+                HStack(spacing: 8) {
+                    Button {
+                        Task {
+                            for provider in store.config.providers {
+                                await store.testProvider(provider)
+                            }
+                        }
+                    } label: {
+                        Label("Refresh health", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(GhostButtonStyle())
+
+                    Button {
+                        store.showAddProvider = true
+                    } label: {
+                        Label("Connect provider", systemImage: "plus")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                Group {
+                    if store.config.providers.isEmpty {
+                        GlassCard {
+                            EmptyState(
+                                symbol: "point.3.connected.trianglepath.dotted",
+                                title: "No providers connected",
+                                message: "Start with Anthropic, OpenAI, or the offline simulation. You can add multiple accounts and custom OpenAI-compatible endpoints.",
+                                actionTitle: "Connect a provider",
+                                action: { store.showAddProvider = true }
+                            )
+                        }
+                    } else {
+                        LazyVGrid(
+                            columns: [GridItem(.flexible(), spacing: 12)],
+                            spacing: 12
+                        ) {
+                            ForEach(store.config.providers) { provider in
+                                ProviderCard(provider: provider) {
+                                    pendingRemoval = provider
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                ProviderSidebar()
+                    .frame(width: 292)
+            }
+        }
+        .confirmationDialog(
+            "Remove \(pendingRemoval?.name ?? "provider")?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil },
+                set: { if !$0 { pendingRemoval = nil } }
+            ),
+            presenting: pendingRemoval
+        ) { provider in
+            Button("Remove provider", role: .destructive) {
+                store.removeProvider(provider)
+                pendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingRemoval = nil
+            }
+        } message: { _ in
+            Text("This removes the provider, its models, its health state, and its Keychain entry. The API key cannot be recovered from WehniRoute.")
+        }
+    }
+}
+
+struct ProviderCard: View {
+    @EnvironmentObject private var store: AppStore
+    let provider: ProviderConfig
+    let onRemove: () -> Void
+
+    @State private var hovering = false
+
+    private var snapshot: HealthSnapshot {
+        store.health[provider.id] ?? HealthSnapshot()
+    }
+
+    private var models: [ModelConfig] {
+        store.models(for: provider.id)
+    }
+
+    private var isTesting: Bool {
+        store.testingProviderID == provider.id
+    }
+
+    private var statusTint: Color {
+        switch snapshot.state {
+        case .healthy: return Theme.green
+        case .degraded: return Theme.amber
+        case .down: return Theme.rose
+        case .unknown: return Theme.faint
+        }
+    }
+
+    private var authLabel: String {
+        if !provider.kind.requiresKey { return "No key" }
+        return "Keychain"
+    }
+
+    private var authTint: Color {
+        if !provider.kind.requiresKey { return Theme.muted }
+        return Theme.green
+    }
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(alignment: .top, spacing: 10) {
+                    ProviderGlyph(kind: provider.kind, size: 38)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(provider.name)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.text)
+                            if provider.kind.isLocal {
+                                Pill(text: "LOCAL", tint: Theme.violet)
+                            }
+                        }
+                        Text(provider.kind.tagline)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.faint)
+                    }
+
+                    Spacer()
+
+                    Pill(text: snapshot.state.label.uppercased(), tint: statusTint)
+
+                    Menu {
+                        Button("Test connection") {
+                            Task { await store.testProvider(provider) }
+                        }
+                        Menu("Simulate next call") {
+                            ForEach(SimulatedFailure.allCases) { failure in
+                                Button(failure.label) {
+                                    store.armSimulation(failure, on: provider.id)
+                                }
+                            }
+                        }
+                        if provider.simulatedFailure != nil {
+                            Button("Clear simulation") {
+                                store.clearSimulation()
+                            }
+                        }
+                        Divider()
+                        Button("Remove provider", role: .destructive, action: onRemove)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                }
+
+                HStack(spacing: 6) {
+                    Pill(text: provider.apiFormat.label.uppercased(), tint: Theme.blue)
+                    if provider.simulatedFailure != nil {
+                        Pill(text: "SIM ARMED", tint: Theme.amber)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { provider.enabled },
+                        set: { store.setProviderEnabled(provider.id, enabled: $0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(Theme.accent)
+                    .scaleEffect(0.8)
+                }
+
+                DividerLine().opacity(0.7)
+
+                HStack(spacing: 18) {
+                    ProviderStat(label: "MODELS", value: "\(models.count)")
+                    ProviderStat(
+                        label: "LATENCY",
+                        value: snapshot.avgLatencyMS.map(Format.latency) ?? "—"
+                    )
+                    ProviderStat(label: "AUTH", value: authLabel, tint: authTint)
+                }
+
+                DividerLine().opacity(0.7)
+
+                HStack(spacing: 8) {
+                    Text(provider.baseURL)
+                        .font(.system(size: 9, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Theme.faint)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Spacer()
+
+                    Button {
+                        Task { await store.testProvider(provider) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isTesting {
+                                ProgressView().controlSize(.small).scaleEffect(0.7)
+                            }
+                            Text(isTesting ? "Testing" : "Test")
+                        }
+                    }
+                    .buttonStyle(GhostButtonStyle())
+                    .disabled(isTesting)
+                }
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+                .stroke(hovering ? Theme.accent.opacity(0.18) : Color.clear, lineWidth: 1)
+        )
+        .onHover { hovering = $0 }
+        .hoverLift()
+    }
+}
+
+private struct ProviderStat: View {
+    let label: String
+    let value: String
+    var tint: Color = Theme.text
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .tracking(0.8)
+                .foregroundStyle(Theme.faint)
+            Text(value)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+        }
+    }
+}
+
+private struct ProviderSidebar: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        VStack(spacing: 12) {
+            GlassCard(padding: 14) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "shield.lefthalf.filled")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                        Text("Connection guide")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.text)
+                        Spacer()
+                        Pill(text: "KEYCHAIN", tint: Theme.green)
+                    }
+
+                    Text("A provider is one upstream API. Keys stay in Keychain; models and routing stay in this app.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    DividerLine().opacity(0.7)
+
+                    ProviderGuideRow(index: "01", title: "Connect", detail: "Paste a key or point at a local endpoint.")
+                    ProviderGuideRow(index: "02", title: "Enable models", detail: "Pick the exact model IDs the router may use.")
+                    ProviderGuideRow(index: "03", title: "Route", detail: "Health, price, and context decide the winner.")
+
+                    DividerLine().opacity(0.7)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(Theme.faint)
+                        Text("Keys are never written to native-config.json.")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Theme.faint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            GlassCard(padding: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("ROUTING IMPACT")
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .tracking(1)
+                        .foregroundStyle(Theme.faint)
+
+                    HStack(spacing: 0) {
+                        ProviderImpactStat(label: "PROVIDERS", value: "\(store.config.providers.count)")
+                        ProviderImpactDivider()
+                        ProviderImpactStat(label: "MODELS", value: "\(store.config.models.count)")
+                        ProviderImpactDivider()
+                        ProviderImpactStat(label: "TRACES", value: "\(store.traces.count)")
+                    }
+
+                    Button("Open routing lab") {
+                        withAnimation(.snappy(duration: 0.22)) {
+                            store.section = .routing
+                        }
+                    }
+                    .buttonStyle(GhostButtonStyle())
+                }
+            }
+        }
+    }
+}
+
+private struct ProviderGuideRow: View {
+    let index: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(index)
+                .font(.system(size: 7, weight: .bold, design: .monospaced))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 13, height: 13)
+                .background(Circle().fill(Theme.accent.opacity(0.12)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.text)
+                Text(detail)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.faint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct ProviderImpactStat: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                .tracking(0.6)
+                .foregroundStyle(Theme.faint)
+            Text(value)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.text)
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ProviderImpactDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Theme.stroke)
+            .frame(width: 1, height: 24)
+            .padding(.horizontal, 9)
+    }
+}
