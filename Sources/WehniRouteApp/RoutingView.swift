@@ -30,9 +30,17 @@ struct RoutingView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 12) {
-                weightsCard
-                previewCard
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 24) {
+                    weightsCard
+                    previewCard
+                        .frame(width: 372)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    weightsCard
+                    previewCard
+                }
             }
             .padding(.top, 12)
 
@@ -155,10 +163,13 @@ struct RoutingView: View {
 
                 DividerLine().opacity(0.7)
 
-                HStack {
+                HStack(spacing: 8) {
                     Text("\(store.rejectedCandidates.count) filtered by policy")
                         .font(.system(size: 9))
                         .foregroundStyle(Theme.faint)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     Spacer()
                     Button("Inspect traces") {
                         withAnimation(.snappy(duration: 0.22)) {
@@ -169,7 +180,6 @@ struct RoutingView: View {
                 }
             }
         }
-        .frame(width: 372)
     }
 
     private var fallbackCard: some View {

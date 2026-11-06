@@ -541,7 +541,21 @@ final class AppStore: ObservableObject {
     }
 
     private func handle(_ request: HTTPRequest) async -> HTTPResponse {
-        let path = request.path.split(separator: "?").first.map(String.init) ?? request.path
+        var path = request.path.split(separator: "?").first.map(String.init) ?? request.path
+
+        // Some OpenAI-compatible clients join a bare base URL with
+        // /chat/completions, and misconfigured ones can double-prefix /v1.
+        // Normalize both onto the canonical routes so every harness connects.
+        switch path {
+        case "/chat/completions", "/v1/v1/chat/completions":
+            path = "/v1/chat/completions"
+        case "/messages", "/v1/v1/messages":
+            path = "/v1/messages"
+        case "/models", "/v1/v1/models":
+            path = "/v1/models"
+        default:
+            break
+        }
 
         switch (request.method, path) {
         case ("GET", "/healthz"):

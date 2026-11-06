@@ -142,7 +142,7 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .pi:
             return "WehniRoute writes a per-launch Pi agent directory with a wehni provider catalog and points PI_CODING_AGENT_DIR at it. Your ~/.pi config is untouched."
         case .deepSeek:
-            return "WehniRoute exports DEEPSEEK_BASE_URL and DEEPSEEK_API_KEY, then opens the DeepSeek Harness web profile. Pick the DeepSeek provider if dsh asks."
+            return "WehniRoute exports DEEPSEEK_BASE_URL and DEEPSEEK_API_KEY, then opens the DeepSeek Harness web profile. The gateway accepts endpoint paths with or without the /v1 prefix, so dsh connects either way; pick the DeepSeek provider if dsh asks."
         }
     }
 }
@@ -181,11 +181,22 @@ final class HarnessLauncher: ObservableObject {
     func refresh() async {
         guard !refreshing else { return }
         refreshing = true
-        var found: [HarnessKind: String] = [:]
-        for harness in HarnessKind.allCases {
-            if let path = await Self.resolve(harness.command) {
-                found[harness] = path
+        let found = await withTaskGroup(
+            of: (HarnessKind, String?).self,
+            returning: [HarnessKind: String].self
+        ) { group in
+            for harness in HarnessKind.allCases {
+                group.addTask {
+                    (harness, await Self.resolve(harness.command))
+                }
             }
+            var results: [HarnessKind: String] = [:]
+            for await (harness, path) in group {
+                if let path {
+                    results[harness] = path
+                }
+            }
+            return results
         }
         detected = found
         refreshCommandStatus()
@@ -486,10 +497,52 @@ final class HarnessLauncher: ObservableObject {
     }
 
     nonisolated private static func resolve(_ command: String) async -> String? {
-        await Task.detached(priority: .utility) {
+        // 1) Well-known install locations. A GUI app's login shell often lacks
+        //    PATH entries that live in ~/.zshrc (interactive-only), so direct
+        //    filesystem checks find CLIs that a bare `zsh -lc` cannot.
+        if let direct = directMatch(command) {
+            return direct
+        }
+        // 2) Login shell, then interactive shell, each with a timeout so a slow
+        //    or blocking profile file cannot wedge the harness list.
+        if let found = await shellResolve(command, login: true) {
+            return found
+        }
+        return await shellResolve(command, login: false)
+    }
+
+    nonisolated private static func directMatch(_ command: String) -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        var directories = ProcessInfo.processInfo.environment["PATH"]?
+            .split(separator: ":")
+            .map(String.init) ?? []
+        directories.append(contentsOf: [
+            home.appendingPathComponent(".local/bin").path,
+            home.appendingPathComponent(".opencode/bin").path,
+            home.appendingPathComponent(".hermes/node/bin").path,
+            home.appendingPathComponent(".npm-global/bin").path,
+            home.appendingPathComponent(".bun/bin").path,
+            home.appendingPathComponent(".codex/bin").path,
+            home.appendingPathComponent(".pi/bin").path,
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+        ])
+
+        var seen = Set<String>()
+        for directory in directories where seen.insert(directory).inserted {
+            let candidate = (directory as NSString).appendingPathComponent(command)
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func shellResolve(_ command: String, login: Bool) async -> String? {
+        await Task.detached(priority: .utility) { () -> String? in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", "command -v \(command)"]
+            process.arguments = [login ? "-lc" : "-ic", "command -v \(command)"]
             let output = Pipe()
             process.standardOutput = output
             process.standardError = FileHandle.nullDevice
@@ -498,12 +551,29 @@ final class HarnessLauncher: ObservableObject {
             } catch {
                 return nil
             }
-            process.waitUntilExit()
+
+            // Bound the wait: profile files can block indefinitely.
+            let deadline = Date().addingTimeInterval(10)
+            while process.isRunning && Date() < deadline {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            if process.isRunning {
+                process.terminate()
+                return nil
+            }
             guard process.terminationStatus == 0 else { return nil }
+
             let data = output.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return path.isEmpty ? nil : path
+            let text = String(data: data, encoding: .utf8) ?? ""
+            let lines = text
+                .split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            // Profile files may print noise; prefer a line that resolves to the
+            // command itself.
+            let match = lines.first { ($0 as NSString).lastPathComponent == command }
+                ?? lines.first { $0.contains("/") }
+            return match
         }.value
     }
 }

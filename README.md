@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.4.0" src="https://img.shields.io/badge/version-0.4.0-5EEAD4?style=flat-square">
+  <img alt="Version 0.4.1" src="https://img.shields.io/badge/version-0.4.1-5EEAD4?style=flat-square">
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-60A5FA?style=flat-square">
   <img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-A78BFA?style=flat-square">
 </p>
 
 WehniRoute is a native macOS control plane for model routing: a SwiftUI app backed by a loopback OpenAI- and Anthropic-compatible gateway. It scores every configured model on task fit, provider health, speed, cost, context headroom, and locality, then falls back through the ranked ladder while recording every attempt.
 
-**Version 0.4.0** adds installable `claude-wehniroute`, `codex-wehniroute`, and sibling commands, a Settings installer for those commands, and an isolated `HERMES_HOME` provider that is verified with a live Hermes session. Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
+**Version 0.4.1** fixes harness detection for CLIs installed outside the login-shell `PATH` (OpenCode, Codex, Pi, and the DeepSeek Harness now detect from their real install locations), accepts OpenAI-compatible endpoint paths with or without the `/v1` prefix so the DeepSeek Harness connects to the gateway, and keeps the Routing lab's weights and candidate-preview cards from crowding each other at narrower window widths. Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
 
 ![Harnesses](docs/screenshots/05-harnesses.jpg)
 
@@ -26,15 +26,15 @@ WehniRoute is a native macOS control plane for model routing: a SwiftUI app back
 
 The release is **ad-hoc signed**, not notarized with a paid Apple Developer ID. The app is otherwise complete and auto-updating. On the first launch of a downloaded copy, macOS will block it. The tested macOS 26.5.2 flow is:
 
-1. Download `WehniRoute-0.4.0.zip` and `WehniRoute-0.4.0.zip.sha256` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
+1. Download `WehniRoute-0.4.1.zip` and `WehniRoute-0.4.1.zip.sha256` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
 2. Verify the download in Terminal:
 
    ```bash
    cd ~/Downloads
-   shasum -a 256 -c WehniRoute-0.4.0.zip.sha256
+   shasum -a 256 -c WehniRoute-0.4.1.zip.sha256
    ```
 
-   Expected SHA-256: `032511e80c2aec08c9128bfbe43926028b8ba315099745f2e5b93460555d899b`.
+   The `.sha256` asset is the authoritative digest for the matching zip.
 
 3. Unzip it, create `~/Applications` if needed, and move **WehniRoute.app** to `~/Applications/WehniRoute.app`. `/Applications` also works if your account can write there.
 4. Open the app once. macOS shows **“WehniRoute” Not Opened**; click **Done** (not **Move to Trash**).
@@ -101,7 +101,7 @@ curl -fsSL https://pi.dev/install.sh | sh
 npm install -g @deepseek-ai/dsh
 ```
 
-Then click the refresh button in Harnesses. **Launch** is enabled only when the executable is found on the login-shell `PATH`.
+Then click the refresh button in Harnesses. Detection checks each CLI's well-known install locations (`~/.local/bin`, `~/.opencode/bin`, `~/.hermes/node/bin`, Homebrew and npm-global prefixes, and more) before falling back to a shell lookup, so harnesses installed outside the login-shell `PATH` are still found. **Launch** is enabled when the executable is found.
 
 ### Terminal commands
 
@@ -274,6 +274,8 @@ curl http://127.0.0.1:20128/healthz
 curl http://127.0.0.1:20128/v1/models
 ```
 
+The gateway also answers `/chat/completions`, `/messages`, and `/models` without the `/v1` prefix, and tolerates a doubled `/v1/v1` prefix, so clients that join a base URL differently (such as the DeepSeek Harness) still connect.
+
 OpenAI-compatible chat:
 
 ```bash
@@ -375,7 +377,7 @@ scripts/
 docs/
   assets/                 Logo exports
   screenshots/            Current window captures
-  release-notes-0.4.0.md  Release notes
+  release-notes-0.4.1.md  Release notes
 ```
 
 Configuration and traces live at:
