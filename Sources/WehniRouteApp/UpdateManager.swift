@@ -33,6 +33,7 @@ final class UpdateManager: ObservableObject {
     @Published private(set) var state: UpdateState = .idle
     @Published private(set) var availableRelease: UpdateRelease?
     @Published private(set) var lastChecked: Date?
+    @Published private(set) var runningTranslocated = false
     @Published var autoUpdateEnabled: Bool {
         didSet {
             UserDefaults.standard.set(autoUpdateEnabled, forKey: Self.autoUpdateDefaultsKey)
@@ -49,11 +50,19 @@ final class UpdateManager: ObservableObject {
             defaults.set(true, forKey: Self.autoUpdateDefaultsKey)
         }
         autoUpdateEnabled = defaults.bool(forKey: Self.autoUpdateDefaultsKey)
+        runningTranslocated = Bundle.main.bundleURL.standardizedFileURL.path
+            .contains("/AppTranslocation/")
+        if runningTranslocated {
+            Self.appendLog("Running from a macOS App Translocation copy; updates will install to a writable Applications folder")
+        }
     }
 
     var statusText: String {
         switch state {
         case .idle:
+            if runningTranslocated {
+                return "Running from a translocated copy. The next update installs to ~/Applications and relaunches there."
+            }
             return "Checks GitHub Releases automatically."
         case .checking:
             return "Checking GitHub Releases…"
@@ -168,13 +177,19 @@ final class UpdateManager: ObservableObject {
             try validate(app: newApp, expectedVersion: release.version)
 
             let currentApp = Bundle.main.bundleURL.standardizedFileURL.resolvingSymlinksInPath()
-            guard FileManager.default.isWritableFile(atPath: currentApp.deletingLastPathComponent().path) else {
+            guard let destination = Self.resolveDestination(currentApp: currentApp) else {
                 throw UpdateError.readOnlyInstallLocation(currentApp.deletingLastPathComponent().path)
+            }
+            switch destination {
+            case .inPlace(let app):
+                Self.appendLog("Installing in place at \(app.path)")
+            case .relocate(let target):
+                Self.appendLog("Current location is read-only or translocated; relocating update to \(target.path)")
             }
 
             state = .installing
             try launchReplacementHelper(
-                currentApp: currentApp,
+                destination: destination,
                 newApp: newApp,
                 staging: staging
             )
@@ -226,11 +241,58 @@ final class UpdateManager: ObservableObject {
         try runProcess("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path])
     }
 
+    /// Picks where the downloaded update is installed. The current folder wins
+    /// when it is writable; otherwise the app relocates to the first writable
+    /// Applications folder so an update works from any launch location,
+    /// including macOS App Translocation mounts.
+    private enum UpdateDestination {
+        case inPlace(URL)
+        case relocate(URL)
+    }
+
+    nonisolated private static func resolveDestination(currentApp: URL) -> UpdateDestination? {
+        let parent = currentApp.deletingLastPathComponent()
+        let translocated = currentApp.path.contains("/AppTranslocation/")
+        if !translocated && FileManager.default.isWritableFile(atPath: parent.path) {
+            return .inPlace(currentApp)
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let candidates = [
+            home.appendingPathComponent("Applications", isDirectory: true),
+            URL(fileURLWithPath: "/Applications", isDirectory: true),
+        ]
+        for directory in candidates {
+            guard isWritableDirectory(directory) else { continue }
+            let target = directory.appendingPathComponent("WehniRoute.app", isDirectory: true)
+            if target.standardizedFileURL != currentApp.standardizedFileURL {
+                return .relocate(target)
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func isWritableDirectory(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        var isDirectory: ObjCBool = false
+        if fm.fileExists(atPath: url.path, isDirectory: &isDirectory) {
+            return isDirectory.boolValue && fm.isWritableFile(atPath: url.path)
+        }
+        // A missing directory is usable when its parent can be written.
+        return fm.isWritableFile(atPath: url.deletingLastPathComponent().path)
+    }
+
     private func launchReplacementHelper(
-        currentApp: URL,
+        destination: UpdateDestination,
         newApp: URL,
         staging: URL
     ) throws {
+        let appPath: String
+        switch destination {
+        case .inPlace(let app), .relocate(let app):
+            appPath = app.path
+        }
+
         let scriptURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("wehni-route-update-\(UUID().uuidString).sh")
         let logURL = SupportDirectory.updateLogURL
@@ -239,32 +301,36 @@ final class UpdateManager: ObservableObject {
         let script = """
         #!/bin/sh
         set -eu
-        APP=\(shellQuote(currentApp.path))
+        APP=\(shellQuote(appPath))
         NEW=\(shellQuote(newApp.path))
         STAGING=\(shellQuote(staging.path))
         PID=\(ProcessInfo.processInfo.processIdentifier)
         LOG=\(shellQuote(logURL.path))
-        BACKUP="${APP}.old.$$"
 
         {
             echo "waiting for WehniRoute pid $PID"
             while kill -0 "$PID" 2>/dev/null; do
                 sleep 0.2
             done
-            echo "replacing $APP"
-            if mv "$APP" "$BACKUP"; then
-                if mv "$NEW" "$APP"; then
-                    xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+            echo "installing update at $APP"
+            mkdir -p "$(dirname "$APP")"
+            BACKUP=""
+            if [ -d "$APP" ]; then
+                BACKUP="${APP}.old.$$"
+                mv "$APP" "$BACKUP"
+            fi
+            if mv "$NEW" "$APP"; then
+                xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+                if [ -n "$BACKUP" ]; then
                     rm -rf "$BACKUP"
-                    echo "update installed"
-                    open "$APP"
-                else
-                    mv "$BACKUP" "$APP" || true
-                    echo "could not move new app into place; restored old app"
-                    exit 1
                 fi
+                echo "update installed at $APP"
+                open "$APP"
             else
-                echo "could not move old app aside"
+                if [ -n "$BACKUP" ]; then
+                    mv "$BACKUP" "$APP" || true
+                fi
+                echo "could not move new app into place; restored old app"
                 exit 1
             fi
             rm -rf "$STAGING"
@@ -457,7 +523,7 @@ enum UpdateError: LocalizedError {
         case .invalidAppBundle:
             return "The update app bundle has the wrong identifier, version, or signature."
         case .readOnlyInstallLocation(let path):
-            return "WehniRoute cannot write to \(path). Move the app to a writable Applications folder and try again."
+            return "WehniRoute could not find a writable install location (tried the current folder, ~/Applications, and /Applications). Last checked location: \(path). Move the app to an Applications folder and try again."
         case .commandFailed(let command, let status):
             return "\(command) failed with status \(status)."
         }

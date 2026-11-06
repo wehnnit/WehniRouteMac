@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.4.1" src="https://img.shields.io/badge/version-0.4.1-5EEAD4?style=flat-square">
+  <img alt="Version 0.4.2" src="https://img.shields.io/badge/version-0.4.2-5EEAD4?style=flat-square">
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-60A5FA?style=flat-square">
   <img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-A78BFA?style=flat-square">
 </p>
 
 WehniRoute is a native macOS control plane for model routing: a SwiftUI app backed by a loopback OpenAI- and Anthropic-compatible gateway. It scores every configured model on task fit, provider health, speed, cost, context headroom, and locality, then falls back through the ranked ladder while recording every attempt.
 
-**Version 0.4.1** fixes harness detection for CLIs installed outside the login-shell `PATH` (OpenCode, Codex, Pi, and the DeepSeek Harness now detect from their real install locations), accepts OpenAI-compatible endpoint paths with or without the `/v1` prefix so the DeepSeek Harness connects to the gateway, and keeps the Routing lab's weights and candidate-preview cards from crowding each other at narrower window widths. Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
+**Version 0.4.2** makes auto-update work from any launch location: when the running copy sits in a read-only folder — including a macOS App Translocation mount, which is what Gatekeeper does to a quarantined app from Downloads — the updater installs the new build into `~/Applications` (falling back to `/Applications`), clears quarantine, and relaunches from there. Version 0.4.1 fixed harness detection for CLIs installed outside the login-shell `PATH`, accepted OpenAI-compatible endpoint paths with or without the `/v1` prefix so the DeepSeek Harness connects, and kept the Routing lab's weights and candidate-preview cards from crowding each other at narrower window widths. Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
 
 ![Harnesses](docs/screenshots/05-harnesses.jpg)
 
@@ -26,12 +26,12 @@ WehniRoute is a native macOS control plane for model routing: a SwiftUI app back
 
 The release is **ad-hoc signed**, not notarized with a paid Apple Developer ID. The app is otherwise complete and auto-updating. On the first launch of a downloaded copy, macOS will block it. The tested macOS 26.5.2 flow is:
 
-1. Download `WehniRoute-0.4.1.zip` and `WehniRoute-0.4.1.zip.sha256` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
+1. Download `WehniRoute-0.4.2.zip` and `WehniRoute-0.4.2.zip.sha256` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
 2. Verify the download in Terminal:
 
    ```bash
    cd ~/Downloads
-   shasum -a 256 -c WehniRoute-0.4.1.zip.sha256
+   shasum -a 256 -c WehniRoute-0.4.2.zip.sha256
    ```
 
    The `.sha256` asset is the authoritative digest for the matching zip.
@@ -42,7 +42,7 @@ The release is **ad-hoc signed**, not notarized with a paid Apple Developer ID. 
 6. Click **Open Anyway** next to the blocked WehniRoute message.
 7. Authenticate with an administrator's Touch ID or administrator password, then confirm **Open**.
 
-This is a one-time Gatekeeper confirmation. The administrator authentication is mandatory for an ad-hoc-signed app; a standard user without administrator authorization cannot complete this step. Auto-updates replace the app in place and clear quarantine on the new bundle.
+This is a one-time Gatekeeper confirmation. The administrator authentication is mandatory for an ad-hoc-signed app; a standard user without administrator authorization cannot complete this step. Auto-updates replace the app in place and clear quarantine on the new bundle. When the current folder is read-only — for example under App Translocation — the updater installs to `~/Applications/WehniRoute.app` instead and relaunches from there.
 
 > A Developer ID certificate is not required to build, ad-hoc sign, zip, auto-update, or use this app. It is only required for a warning-free first-open experience.
 
@@ -377,7 +377,7 @@ scripts/
 docs/
   assets/                 Logo exports
   screenshots/            Current window captures
-  release-notes-0.4.1.md  Release notes
+  release-notes-0.4.2.md  Release notes
 ```
 
 Configuration and traces live at:

@@ -322,6 +322,13 @@ struct SettingsView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(updates.state.isBusy ? Theme.amber : Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if updates.runningTranslocated {
+                        Text("This copy was launched from a quarantined location, so macOS runs it from a read-only translocation mount. Updates install to ~/Applications and relaunch from there; this notice clears after the first update.")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Theme.amber)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -349,7 +356,7 @@ struct SettingsView: View {
                         .buttonStyle(GhostButtonStyle())
                     }
 
-                    Text("Updates replace this app bundle wherever it lives, preserve the local data folder, and remove the previous bundle after a successful install.")
+                    Text("Updates install wherever the app lives when it is writable; from a read-only or translocated copy they install to ~/Applications instead, clear quarantine, and relaunch. The local data folder is preserved and the previous bundle is removed after a successful install.")
                         .font(.system(size: 9))
                         .foregroundStyle(Theme.faint)
                         .multilineTextAlignment(.trailing)
