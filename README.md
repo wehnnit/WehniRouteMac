@@ -106,7 +106,9 @@ Then click the refresh button in Harnesses. **Launch** is enabled only when the 
 **Install commands** writes one wrapper per detected CLI to `~/.local/bin`:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+# Add once to ~/.zshrc, then open a new Terminal:
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+
 claude-wehniroute      # Claude Code through WehniRoute
 opencode-wehniroute    # OpenCode through WehniRoute
 codex-wehniroute       # Codex through WehniRoute
