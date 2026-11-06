@@ -114,7 +114,10 @@ final class AppStore: ObservableObject {
     @Published var needsSetup = false
 
     private let server = GatewayServer()
+    private let interceptor = TalkNovaInterceptor()
     private let startedAt = Date()
+
+    @Published private(set) var interceptorPort: Int?
 
     static var homeDirectory: URL {
         SupportDirectory.url
@@ -235,14 +238,33 @@ final class AppStore: ObservableObject {
                 return await self.handle(request)
             }
             gatewayStatus = .running(port: config.gatewayPort)
+            startInterceptor()
         } catch {
             gatewayStatus = .failed(error.localizedDescription)
             showToast(error.localizedDescription, kind: .error)
         }
     }
 
+    /// The TalkNova interception proxy only matters when a TalkNova launch pads
+    /// runs; failures are silent here and surface at launch time.
+    private func startInterceptor() {
+        interceptor.update(gatewayPort: config.gatewayPort, gatewayKey: gatewayAPIKey)
+        guard !interceptor.isRunning else {
+            interceptorPort = interceptor.port
+            return
+        }
+        do {
+            try interceptor.start()
+            interceptorPort = interceptor.port
+        } catch {
+            interceptorPort = nil
+        }
+    }
+
     func stopGateway() {
         server.stop()
+        interceptor.stop()
+        interceptorPort = nil
         gatewayStatus = .stopped
     }
 
@@ -280,6 +302,7 @@ final class AppStore: ObservableObject {
     func regenerateGatewayKey() {
         gatewayAPIKey = Self.makeGatewayKey()
         Self.writeGatewayKey(gatewayAPIKey, to: gatewayKeyURL)
+        interceptor.update(gatewayPort: config.gatewayPort, gatewayKey: gatewayAPIKey)
         showToast("Gateway key rotated", kind: .success)
     }
 

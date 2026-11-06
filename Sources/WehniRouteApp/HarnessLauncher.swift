@@ -170,6 +170,7 @@ struct HarnessLaunchSpec {
 private enum HarnessLaunchError: LocalizedError {
     case notInstalled(String)
     case gatewayOffline
+    case interceptorUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -177,6 +178,8 @@ private enum HarnessLaunchError: LocalizedError {
             return "Install \(command) first, then refresh the harness list."
         case .gatewayOffline:
             return "Start the WehniRoute gateway before launching a harness."
+        case .interceptorUnavailable:
+            return "The TalkNova interception proxy could not start. Check that /usr/bin/openssl is available and try again."
         }
     }
 }

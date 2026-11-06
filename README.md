@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.4.4" src="https://img.shields.io/badge/version-0.4.4-5EEAD4?style=flat-square">
+  <img alt="Version 0.5.0" src="https://img.shields.io/badge/version-0.5.0-5EEAD4?style=flat-square">
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-60A5FA?style=flat-square">
   <img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-A78BFA?style=flat-square">
 </p>
 
 WehniRoute is a native macOS control plane for model routing: a SwiftUI app backed by a loopback OpenAI- and Anthropic-compatible gateway. It scores every configured model on task fit, provider health, speed, cost, context headroom, and locality, then falls back through the ranked ladder while recording every attempt.
 
-**Version 0.4.4** presents the gateway to every client as a single model — **WehniRoute Auto** (`/v1/models` lists only `auto`, and response bodies report `model: auto` while the trace log keeps the real selection) — and turns TalkNova into a provider preset: TalkNova's desktop client is hardwired to its own cloud, so the working integration is connecting TalkNova's OpenAI-compatible API (`talknova.site/v1`) as a provider with your personal `tn-live-` key, which puts its catalog in the routing ladder for every harness. The TalkNova launch pad remains as a one-click app opener with an honest setup note. Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
+**Version 0.5.0** truly wires the TalkNova desktop app into WehniRoute. Reverse engineering TalkNova 0.3.77 showed its backend issues every HTTPS call through `urllib.request.urlopen` with the default opener and a TLS context that honors `SSL_CERT_FILE`, so WehniRoute now runs a local loopback interception proxy: TalkNova launches with its proxy environment pointed there, chat and model listing are served by the WehniRoute gateway — the model picker shows **WehniRoute Auto** and chat consumes no TalkNova usage — while account, login, and usage paths still reach the real TalkNova service. Other hosts tunnel blind without inspection. TalkNova as a provider preset remains available for routing its catalog to other harnesses, and the gateway continues to present a single **WehniRoute Auto** model to every client (`/v1/models` lists only `auto`; response bodies report `model: auto` while the trace log keeps the real selection). Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
 
 ![Harnesses](docs/screenshots/05-harnesses.jpg)
 
@@ -78,7 +78,7 @@ All launch scripts read the local gateway key at launch. Provider API keys stay 
 | Hermes Agent | `hermes` | OpenAI-compatible custom endpoint | Isolated `HERMES_HOME` with a `wehni` provider |
 | Pi | `pi` | OpenAI Chat Completions | Isolated `PI_CODING_AGENT_DIR` with `models.json` |
 | DeepSeek Harness | `dsh` | DeepSeek / OpenAI-compatible | `DEEPSEEK_BASE_URL`, `DEEPSEEK_API_KEY`, DSH web profile |
-| TalkNova | TalkNova.app | Desktop app | One-click launch; connect TalkNova as a provider for actual routing |
+| TalkNova | TalkNova.app | Desktop app via local interception | Chat and models served by the gateway; account traffic relayed to TalkNova |
 
 ### Install the CLIs
 
@@ -104,9 +104,13 @@ npm install -g @deepseek-ai/dsh
 # TalkNova desktop app — install TalkNova.app in /Applications from talknova.site
 ```
 
+### TalkNova interception
+
+TalkNova's desktop client always talks to its own cloud, and its endpoints are compiled in. WehniRoute therefore intercepts it on the wire: launching from Harnesses sets `HTTPS_PROXY` and `SSL_CERT_FILE` in TalkNova's environment, and a loopback proxy that MITMs **only** `talknova.site` serves `/v1/chat/completions` and `/v1/models` from the WehniRoute gateway. Everything else on `talknova.site` (account, login exchange, usage) is relayed to the real service byte for byte, and all other hosts tunnel blind. A WehniRoute-local CA is generated under Application Support (mode 0600) and is only trusted by TalkNova processes launched from WehniRoute. Chat no longer consumes TalkNova usage, and the model picker shows **WehniRoute Auto**.
+
 ### Connect TalkNova as a provider
 
-TalkNova's desktop client always talks to its own cloud, so WehniRoute integrates with it as a provider instead. In TalkNova, open **Settings → API access** and copy your personal `tn-live-…` key; in WehniRoute, use **Connect provider → TalkNova** and paste it. WehniRoute then reaches TalkNova's OpenAI-compatible catalog at `https://talknova.site/v1` and its models join the routing ladder for every harness.
+To also make TalkNova's own models available to other harnesses, copy your personal `tn-live-…` key from TalkNova's **Settings → API access**, then use **Connect provider → TalkNova**. WehniRoute reaches TalkNova's OpenAI-compatible catalog at `https://talknova.site/v1` and its models join the routing ladder for every harness.
 
 Then click the refresh button in Harnesses. Detection checks each CLI's well-known install locations (`~/.local/bin`, `~/.opencode/bin`, `~/.hermes/node/bin`, Homebrew and npm-global prefixes, and more) before falling back to a shell lookup, so harnesses installed outside the login-shell `PATH` are still found. **Launch** is enabled when the executable is found.
 
@@ -140,7 +144,7 @@ The app writes only under `~/Library/Application Support/WehniRoute/harnesses/`:
 - `~/.local/bin/<agent>-wehniroute` — optional terminal wrappers installed by **Install commands**.
 - `pi-agent/models.json` — an isolated Pi provider catalog with model `auto`.
 - `deepseek.command` — exports the DeepSeek base URL/key and opens `dsh web`.
-- `talknova.command` — opens the TalkNova desktop app. TalkNova's client is cloud-bound, so no gateway configuration is injected; connect TalkNova as a provider for routing.
+- `talknova.command` — launches TalkNova with `HTTPS_PROXY` and `SSL_CERT_FILE` pointing at the local interception proxy; quits an already-running TalkNova first so the interception takes effect.
 
 The scripts are mode `0700`; generated JSON/TOML files are mode `0600`. Your existing global Claude, OpenCode, Codex, Hermes, Pi, and DSH configuration is not edited.
 
@@ -386,7 +390,7 @@ scripts/
 docs/
   assets/                 Logo exports
   screenshots/            Current window captures
-  release-notes-0.4.4.md  Release notes
+  release-notes-0.5.0.md  Release notes
 ```
 
 Configuration and traces live at:
@@ -407,6 +411,7 @@ Provider API keys live in the Keychain under service `com.wehnnit.WehniRoute`. T
 - Provider keys are read from the Keychain at call time. They are never persisted in the config file, trace log, or app UI.
 - The local gateway key is a random, user-only `0600` file. Provider credentials are never written to that file.
 - Harness configs are isolated under Application Support and are mode `0600`; launch scripts are mode `0700`.
+- The TalkNova interception proxy MITMs only `talknova.site` over a loopback listener. The local CA key is generated by the app with the system `openssl`, stored mode 0600 under Application Support, and included in the trust bundle only for TalkNova launches from WehniRoute. Decrypted TalkNova traffic is never logged; chat is relayed to the local gateway and everything else to the real service.
 - API-key enforcement is off by default for local convenience and can be enabled in Settings.
 - Auto-updates require HTTPS GitHub release assets, a matching SHA-256 digest, the expected bundle identifier and version, and a valid code signature. Ad-hoc signing proves bundle integrity, not developer identity; the GitHub repository is the trust anchor.
 - The app collects no analytics and makes no calls to a WehniRoute service.

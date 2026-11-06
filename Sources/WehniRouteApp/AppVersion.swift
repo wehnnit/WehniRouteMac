@@ -3,11 +3,11 @@ import WehniRouteCore
 
 enum AppVersion {
     static var short: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.4"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.5.0"
     }
 
     static var build: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "9"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "10"
     }
 
     static let updateRepository = "wehnnit/WehniRouteMac"
