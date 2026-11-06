@@ -34,7 +34,9 @@ The release is **ad-hoc signed**, not notarized with a paid Apple Developer ID. 
    shasum -a 256 -c WehniRoute-0.4.0.zip.sha256
    ```
 
-3. Unzip it and drag **WehniRoute.app** to `/Applications` or `~/Applications`.
+   Expected SHA-256: `032511e80c2aec08c9128bfbe43926028b8ba315099745f2e5b93460555d899b`.
+
+3. Unzip it, create `~/Applications` if needed, and move **WehniRoute.app** to `~/Applications/WehniRoute.app`. `/Applications` also works if your account can write there.
 4. Open the app once. macOS shows **“WehniRoute” Not Opened**; click **Done** (not **Move to Trash**).
 5. Open **System Settings → Privacy & Security** and scroll to **Security**.
 6. Click **Open Anyway** next to the blocked WehniRoute message.
@@ -169,7 +171,7 @@ The updater is an in-place native updater:
 
 No parallel copy is left behind. If installation fails, the old bundle is restored. Diagnostics go to `~/Library/Application Support/WehniRoute/update.log`.
 
-The app bundle's parent directory must be writable; `/Applications` and `~/Applications` work for an admin user.
+The app bundle's parent directory must be writable. The standard user install path is `~/Applications/WehniRoute.app`; `/Applications` requires administrator write permission.
 
 ---
 

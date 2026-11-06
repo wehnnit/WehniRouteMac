@@ -2,6 +2,8 @@
 
 WehniRoute 0.4.0 is the first release from the clean `wehnnit` repository. It adds first-class terminal commands for every generated harness, fixes Hermes Agent's provider home, and keeps the local-only gateway and in-place updater intact.
 
+The public release is [WehniRoute 0.4.0](https://github.com/wehnnit/WehniRouteMac/releases/tag/v0.4.0). The assets are `WehniRoute-0.4.0.zip` and `WehniRoute-0.4.0.zip.sha256`; the zip SHA-256 is `032511e80c2aec08c9128bfbe43926028b8ba315099745f2e5b93460555d899b`.
+
 ## Highlights
 
 - **Terminal commands** — install `claude-wehniroute`, `opencode-wehniroute`, `codex-wehniroute`, `hermes-wehniroute`, `pi-wehniroute`, and `dsh-wehniroute` into `~/.local/bin` from Harnesses or Settings. Each command opens the real CLI with the generated WehniRoute configuration and any arguments you append.
@@ -24,7 +26,7 @@ WehniRoute 0.4.0 is the first release from the clean `wehnnit` repository. It ad
 
 ## Install without a paid Apple Developer ID
 
-The app is ad-hoc signed, not notarized. On macOS 26.5.2, first open shows **“WehniRoute” Not Opened**; click **Done**, then use **System Settings → Privacy & Security → Security → Open Anyway**, authenticate with an administrator's Touch ID or password, and confirm **Open**. This is a one-time Gatekeeper confirmation and requires administrator authorization; a standard user without it cannot complete this step. Auto-updates clear quarantine on the new bundle. The `.sha256` asset contains a filename-only digest, so it works with `shasum -a 256 -c WehniRoute-0.4.0.zip.sha256` from the Downloads folder.
+The app is ad-hoc signed, not notarized. On macOS 26.5.2, first open shows **“WehniRoute” Not Opened**; click **Done**, then use **System Settings → Privacy & Security → Security → Open Anyway**, authenticate with an administrator's Touch ID or password, and confirm **Open**. This is a one-time Gatekeeper confirmation and requires administrator authorization; a standard user without it cannot complete this step. Auto-updates clear quarantine on the new bundle. For a standard user account, install the verified app at `~/Applications/WehniRoute.app`; `/Applications` is optional if your account can write there. The `.sha256` asset contains a filename-only digest, so it works with `shasum -a 256 -c WehniRoute-0.4.0.zip.sha256` from the Downloads folder.
 
 ## Updating
 
