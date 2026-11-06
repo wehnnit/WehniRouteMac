@@ -9,7 +9,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
     case hermes
     case pi
     case deepSeek = "deepseek"
-    case talkNova = "talknova"
 
     var id: String { rawValue }
 
@@ -21,7 +20,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .hermes: return "Hermes Agent"
         case .pi: return "Pi"
         case .deepSeek: return "DeepSeek Harness"
-        case .talkNova: return "TalkNova"
         }
     }
 
@@ -33,7 +31,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .hermes: return "hermes"
         case .pi: return "pi"
         case .deepSeek: return "dsh"
-        case .talkNova: return "TalkNova"
         }
     }
 
@@ -45,7 +42,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .hermes: return "hermes-wehniroute"
         case .pi: return "pi-wehniroute"
         case .deepSeek: return "dsh-wehniroute"
-        case .talkNova: return "talknova-wehniroute"
         }
     }
 
@@ -57,7 +53,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .hermes: return "Hermes with a generated provider home"
         case .pi: return "Pi with a generated provider catalog"
         case .deepSeek: return "DeepSeek Harness, pointed at WehniRoute"
-        case .talkNova: return "TalkNova desktop, routed locally"
         }
     }
 
@@ -86,7 +81,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .hermes: return "bolt.horizontal.circle.fill"
         case .pi: return "function"
         case .deepSeek: return "wave.3.right"
-        case .talkNova: return "bubble.left.and.bubble.right.fill"
         }
     }
 
@@ -98,7 +92,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
         case .hermes: return Theme.blue
         case .pi: return Theme.green
         case .deepSeek: return Theme.rose
-        case .talkNova: return Color(hex: 0x38BDF8)
         }
     }
 
@@ -116,8 +109,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
             return "curl -fsSL https://pi.dev/install.sh | sh"
         case .deepSeek:
             return "npm install -g @deepseek-ai/dsh"
-        case .talkNova:
-            return "Install TalkNova.app in /Applications (talknova.site)"
         }
     }
 
@@ -135,8 +126,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
             return URL(string: "https://pi.dev/docs/latest/models")!
         case .deepSeek:
             return URL(string: "https://github.com/deepseek-ai/deepseek-harness")!
-        case .talkNova:
-            return URL(string: "https://talknova.site")!
         }
     }
 
@@ -154,8 +143,6 @@ enum HarnessKind: String, CaseIterable, Identifiable {
             return "WehniRoute writes a per-launch Pi agent directory with a wehni provider catalog and points PI_CODING_AGENT_DIR at it. Your ~/.pi config is untouched."
         case .deepSeek:
             return "WehniRoute exports DEEPSEEK_BASE_URL and DEEPSEEK_API_KEY, then opens the DeepSeek Harness web profile. The gateway accepts endpoint paths with or without the /v1 prefix, so dsh connects either way; pick the DeepSeek provider if dsh asks."
-        case .talkNova:
-            return "TalkNova's desktop client is hardwired to its own cloud service, so WehniRoute cannot capture its chat traffic. Launch here simply opens the app. To actually route TalkNova models through WehniRoute, connect TalkNova as a provider: copy your personal tn-live key from TalkNova → Settings → API access, then use Connect provider → TalkNova. TalkNova's catalog then joins the routing ladder for every other harness."
         }
     }
 }
@@ -170,7 +157,6 @@ struct HarnessLaunchSpec {
 private enum HarnessLaunchError: LocalizedError {
     case notInstalled(String)
     case gatewayOffline
-    case interceptorUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -178,8 +164,6 @@ private enum HarnessLaunchError: LocalizedError {
             return "Install \(command) first, then refresh the harness list."
         case .gatewayOffline:
             return "Start the WehniRoute gateway before launching a harness."
-        case .interceptorUnavailable:
-            return "The TalkNova interception proxy could not start. Check that /usr/bin/openssl is available and try again."
         }
     }
 }
@@ -463,12 +447,6 @@ final class HarnessLauncher: ObservableObject {
             environment["DEEPSEEK_API_KEY"] = store.gatewayAPIKey
             environment["DEEPSEEK_MODEL"] = "auto"
 
-        case .talkNova:
-            // TalkNova's desktop client talks only to its own cloud; there is
-            // no endpoint override to set. Launching here just opens the app.
-            // The real integration is the TalkNova provider preset, which
-            // routes its catalog through the gateway for other harnesses.
-            break
         }
 
         return HarnessLaunchSpec(
@@ -520,10 +498,6 @@ final class HarnessLauncher: ObservableObject {
     }
 
     nonisolated private static func resolve(_ harness: HarnessKind) async -> String? {
-        // Desktop-app harnesses ship as .app bundles rather than PATH commands.
-        if let binary = appBundleBinary(harness) {
-            return binary
-        }
         let command = harness.command
         // 1) Well-known install locations. A GUI app's login shell often lacks
         //    PATH entries that live in ~/.zshrc (interactive-only), so direct
@@ -537,24 +511,6 @@ final class HarnessLauncher: ObservableObject {
             return found
         }
         return await shellResolve(command, login: false)
-    }
-
-    /// Returns the executable inside an installed desktop-app harness.
-    nonisolated private static func appBundleBinary(_ harness: HarnessKind) -> String? {
-        guard harness == .talkNova else { return nil }
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        for directory in [
-            URL(fileURLWithPath: "/Applications", isDirectory: true),
-            home.appendingPathComponent("Applications", isDirectory: true),
-        ] {
-            let binary = directory
-                .appendingPathComponent("TalkNova.app", isDirectory: true)
-                .appendingPathComponent("Contents/MacOS/TalkNova")
-            if FileManager.default.isExecutableFile(atPath: binary.path) {
-                return binary.path
-            }
-        }
-        return nil
     }
 
     nonisolated private static func directMatch(_ command: String) -> String? {
