@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.4.2" src="https://img.shields.io/badge/version-0.4.2-5EEAD4?style=flat-square">
+  <img alt="Version 0.4.3" src="https://img.shields.io/badge/version-0.4.3-5EEAD4?style=flat-square">
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-60A5FA?style=flat-square">
   <img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-A78BFA?style=flat-square">
 </p>
 
 WehniRoute is a native macOS control plane for model routing: a SwiftUI app backed by a loopback OpenAI- and Anthropic-compatible gateway. It scores every configured model on task fit, provider health, speed, cost, context headroom, and locality, then falls back through the ranked ladder while recording every attempt.
 
-**Version 0.4.2** makes auto-update work from any launch location: when the running copy sits in a read-only folder — including a macOS App Translocation mount, which is what Gatekeeper does to a quarantined app from Downloads — the updater installs the new build into `~/Applications` (falling back to `/Applications`), clears quarantine, and relaunches from there. Version 0.4.1 fixed harness detection for CLIs installed outside the login-shell `PATH`, accepted OpenAI-compatible endpoint paths with or without the `/v1` prefix so the DeepSeek Harness connects, and kept the Routing lab's weights and candidate-preview cards from crowding each other at narrower window widths. Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
+**Version 0.4.3** adds the TalkNova desktop app as a seventh harness — WehniRoute launches `/Applications/TalkNova.app` with its documented `TALKNOVA_CHAT_URL` and `TALKNOVA_MODELS_URL` overrides pointed at the local gateway — and replaces the Routing lab's segmented task picker with a compressible control so it can no longer overflow the Candidate preview card. Version 0.4.2 made auto-update work from any launch location by relocating into `~/Applications` when the running copy is read-only or translocated. Version 0.4.1 fixed harness detection for CLIs installed outside the login-shell `PATH` and accepted OpenAI-compatible endpoint paths with or without the `/v1` prefix so the DeepSeek Harness connects. Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
 
 ![Harnesses](docs/screenshots/05-harnesses.jpg)
 
@@ -78,6 +78,7 @@ All launch scripts read the local gateway key at launch. Provider API keys stay 
 | Hermes Agent | `hermes` | OpenAI-compatible custom endpoint | Isolated `HERMES_HOME` with a `wehni` provider |
 | Pi | `pi` | OpenAI Chat Completions | Isolated `PI_CODING_AGENT_DIR` with `models.json` |
 | DeepSeek Harness | `dsh` | DeepSeek / OpenAI-compatible | `DEEPSEEK_BASE_URL`, `DEEPSEEK_API_KEY`, DSH web profile |
+| TalkNova | TalkNova.app | OpenAI Chat Completions | `TALKNOVA_CHAT_URL` and `TALKNOVA_MODELS_URL` overrides; launches the desktop app |
 
 ### Install the CLIs
 
@@ -99,6 +100,8 @@ curl -fsSL https://pi.dev/install.sh | sh
 
 # DeepSeek Harness
 npm install -g @deepseek-ai/dsh
+
+# TalkNova desktop app — install TalkNova.app in /Applications from talknova.site
 ```
 
 Then click the refresh button in Harnesses. Detection checks each CLI's well-known install locations (`~/.local/bin`, `~/.opencode/bin`, `~/.hermes/node/bin`, Homebrew and npm-global prefixes, and more) before falling back to a shell lookup, so harnesses installed outside the login-shell `PATH` are still found. **Launch** is enabled when the executable is found.
@@ -117,6 +120,7 @@ codex-wehniroute       # Codex through WehniRoute
 hermes-wehniroute      # Hermes Agent through WehniRoute
 pi-wehniroute          # Pi through WehniRoute
 dsh-wehniroute         # DeepSeek Harness through WehniRoute
+talknova-wehniroute    # TalkNova desktop app through WehniRoute
 ```
 
 Each wrapper regenerates the isolated harness configuration, reads the local gateway key, and `exec`s the real CLI with any arguments you append.
@@ -132,6 +136,7 @@ The app writes only under `~/Library/Application Support/WehniRoute/harnesses/`:
 - `~/.local/bin/<agent>-wehniroute` — optional terminal wrappers installed by **Install commands**.
 - `pi-agent/models.json` — an isolated Pi provider catalog with model `auto`.
 - `deepseek.command` — exports the DeepSeek base URL/key and opens `dsh web`.
+- TalkNova needs no generated files: the launch script starts `/Applications/TalkNova.app` directly with `TALKNOVA_CHAT_URL` and `TALKNOVA_MODELS_URL` pointed at the gateway. TalkNova keeps using its own stored key for the Bearer header, so keep **Require API key** off to use it.
 
 The scripts are mode `0700`; generated JSON/TOML files are mode `0600`. Your existing global Claude, OpenCode, Codex, Hermes, Pi, and DSH configuration is not edited.
 
@@ -208,7 +213,7 @@ Window-only captures at 1000px wide. The status strip is visible in every main-s
 - **Anthropic Messages** at `/v1/messages`, with canonical request and response translation.
 - **Deterministic routing** across task fit, health, latency, cost, context headroom, and locality.
 - **Provider presets** for Anthropic, OpenAI, Groq, Google AI Studio, OpenRouter, Ollama, a custom OpenAI-compatible endpoint, and an offline simulation.
-- **Harnesses** for Claude Code, OpenCode, Codex, Hermes Agent, Pi, and DeepSeek Harness.
+- **Harnesses** for Claude Code, OpenCode, Codex, Hermes Agent, Pi, DeepSeek Harness, and TalkNova.
 - **Trace inspector** for candidate order, fallback attempts, latency, tokens, cost, request shape, and the selected route.
 - **Circuit breaking** after repeated failures, with a cooldown before a provider re-enters the candidate set.
 - **Streaming** OpenAI and Anthropic responses synthesized as SSE from a non-streaming upstream call.
@@ -377,7 +382,7 @@ scripts/
 docs/
   assets/                 Logo exports
   screenshots/            Current window captures
-  release-notes-0.4.2.md  Release notes
+  release-notes-0.4.3.md  Release notes
 ```
 
 Configuration and traces live at:

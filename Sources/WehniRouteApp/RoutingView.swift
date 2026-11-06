@@ -130,13 +130,7 @@ struct RoutingView: View {
                         .foregroundStyle(Theme.faint)
                 }
 
-                Picker("Preview task", selection: $store.previewTask) {
-                    ForEach(TaskType.allCases, id: \.self) { task in
-                        Text(task.label).tag(task)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                TaskSegmentPicker(selection: $store.previewTask)
 
                 if candidates.isEmpty {
                     VStack(alignment: .leading, spacing: 5) {
@@ -325,6 +319,41 @@ private struct WeightSlider: View {
                 .tint(tint)
                 .controlSize(.mini)
         }
+    }
+}
+
+/// A segmented control built from buttons so it can compress with the card.
+/// NSSegmentedControl keeps a large minimum width and overflows fixed-width
+/// cards, which is what clipped the Candidate preview card.
+private struct TaskSegmentPicker: View {
+    @Binding var selection: TaskType
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(TaskType.allCases, id: \.self) { task in
+                Button {
+                    selection = task
+                } label: {
+                    Text(task.label)
+                        .font(.system(size: 9, weight: selection == task ? .semibold : .medium))
+                        .foregroundStyle(selection == task ? Color(hex: 0x061014) : Theme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(selection == task ? Theme.accent : Color.white.opacity(0.03))
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(Color.black.opacity(0.18)))
+        .overlay(Capsule().stroke(Theme.stroke, lineWidth: 0.8))
     }
 }
 

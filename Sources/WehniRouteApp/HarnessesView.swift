@@ -115,7 +115,7 @@ private struct HarnessHeaderStatus: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Pill(text: "6 LAUNCHERS", tint: Theme.accent)
+            Pill(text: "\(HarnessKind.allCases.count) LAUNCHERS", tint: Theme.accent)
             Button {
                 Task { await launcher.refresh() }
             } label: {
