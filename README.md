@@ -24,15 +24,23 @@ WehniRoute is a native macOS control plane for model routing: a SwiftUI app back
 
 ## Install without a paid Apple Developer ID
 
-The release is **ad-hoc signed**, not notarized with a paid Apple Developer ID. The app is otherwise complete and auto-updating. On the first launch of a downloaded copy, macOS will block it:
+The release is **ad-hoc signed**, not notarized with a paid Apple Developer ID. The app is otherwise complete and auto-updating. On the first launch of a downloaded copy, macOS will block it. The tested macOS 26.5.2 flow is:
 
-1. Download `WehniRoute-0.4.0.zip` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
-2. Unzip it and drag **WehniRoute.app** to `/Applications` or `~/Applications`.
-3. Open **System Settings → Privacy & Security**.
-4. Scroll to **Security**, click **Open Anyway**, then confirm **Open**.
-5. Alternatively, right-click the app and choose **Open**.
+1. Download `WehniRoute-0.4.0.zip` and `WehniRoute-0.4.0.zip.sha256` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
+2. Verify the download in Terminal:
 
-This is a one-time Gatekeeper confirmation. Auto-updates replace the app in place and clear quarantine on the new bundle.
+   ```bash
+   cd ~/Downloads
+   shasum -a 256 -c WehniRoute-0.4.0.zip.sha256
+   ```
+
+3. Unzip it and drag **WehniRoute.app** to `/Applications` or `~/Applications`.
+4. Open the app once. macOS shows **“WehniRoute” Not Opened**; click **Done** (not **Move to Trash**).
+5. Open **System Settings → Privacy & Security** and scroll to **Security**.
+6. Click **Open Anyway** next to the blocked WehniRoute message.
+7. Authenticate with an administrator's Touch ID or administrator password, then confirm **Open**.
+
+This is a one-time Gatekeeper confirmation. The administrator authentication is mandatory for an ad-hoc-signed app; a standard user without administrator authorization cannot complete this step. Auto-updates replace the app in place and clear quarantine on the new bundle.
 
 > A Developer ID certificate is not required to build, ad-hoc sign, zip, auto-update, or use this app. It is only required for a warning-free first-open experience.
 
@@ -186,7 +194,7 @@ The app bundle's parent directory must be writable; `/Applications` and `~/Appli
 ### Settings
 ![Settings](docs/screenshots/07-settings.jpg)
 
-Window-only captures at 1200px wide. The status strip is visible in every main-screen capture.
+Window-only captures at 1000px wide. The status strip is visible in every main-screen capture.
 
 ---
 

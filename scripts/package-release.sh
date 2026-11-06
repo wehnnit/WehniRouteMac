@@ -23,7 +23,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
-shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+(cd "$OUT" && shasum -a 256 "WehniRoute-$VERSION.zip" > "WehniRoute-$VERSION.zip.sha256")
 
 echo "Created:"
 ls -lh "$ARCHIVE" "$ARCHIVE.sha256"
