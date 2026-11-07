@@ -5,3 +5,6 @@ Resources/AppIcon.iconset/
 .DS_Store
 .freebuff/
 *.xcuserstate
+
+# Website (private, deployed to Cloudflare — never published to the repo)
+/Website/
