@@ -242,20 +242,19 @@ public enum Router {
     // MARK: - Scores
 
     static func taskFit(kind: ProviderKind, task: TaskType, strategy: Strategy) -> Double {
-        if strategy == .local {
-            return kind.isLocal ? 1.0 : 0.25
-        }
-        if strategy == .cheap {
-            return kind.isLocal ? 1.0 : 0.55
-        }
+        if kind == .simulation { return simulationFit(task: task, strategy: strategy) }
+        if kind.isLocal { return localFit(task: task, strategy: strategy) }
+
+        if strategy == .local { return 0.25 }
+        if strategy == .cheap { return 0.55 }
         if strategy == .reliable {
             switch kind {
             case .anthropic, .openai, .google: return 0.9
             case .groq, .openrouter, .mistral, .xai, .deepseek: return 0.8
             case .together, .cerebras, .fireworks, .moonshot, .nvidia: return 0.75
-            case .ollama, .lmstudio, .simulation, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.6
             case .talkNova: return 0.75
             case .custom: return 0.7
+            default: break
             }
         }
 
@@ -277,8 +276,7 @@ public enum Router {
             case .nvidia: return 0.73
             case .custom: return 0.72
             case .talkNova: return 0.76
-            case .simulation: return 0.75
-            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.60
+            default: return 0.7
             }
         case .reasoning:
             switch kind {
@@ -297,8 +295,7 @@ public enum Router {
             case .nvidia: return 0.71
             case .custom: return 0.70
             case .talkNova: return 0.71
-            case .simulation: return 0.70
-            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.58
+            default: return 0.7
             }
         case .writing:
             switch kind {
@@ -317,8 +314,7 @@ public enum Router {
             case .nvidia: return 0.71
             case .custom: return 0.70
             case .talkNova: return 0.73
-            case .simulation: return 0.72
-            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.62
+            default: return 0.7
             }
         case .fast:
             switch kind {
@@ -338,7 +334,7 @@ public enum Router {
             case .nvidia: return 0.72
             case .custom: return 0.65
             case .talkNova: return 0.80
-            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.58
+            default: return 0.7
             }
         case .vision:
             switch kind {
@@ -357,11 +353,44 @@ public enum Router {
             case .nvidia: return 0.56
             case .custom: return 0.60
             case .talkNova: return 0.62
-            case .simulation: return 0.40
-            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.50
+            default: return 0.7
             }
         case .unknown:
             return 0.7
+        }
+    }
+
+    /// Local engines share one fit profile: capable, private, sometimes slow.
+    /// Values are exactly the ones ollama/lmstudio had per task.
+    private static func localFit(task: TaskType, strategy: Strategy) -> Double {
+        switch strategy {
+        case .local, .cheap: return 1.0
+        case .reliable: return 0.6
+        default: break
+        }
+        switch task {
+        case .coding: return 0.60
+        case .reasoning: return 0.58
+        case .writing: return 0.62
+        case .fast: return 0.58
+        case .vision: return 0.50
+        case .unknown: return 0.60
+        }
+    }
+
+    private static func simulationFit(task: TaskType, strategy: Strategy) -> Double {
+        switch strategy {
+        case .local, .cheap: return 1.0
+        case .reliable: return 0.6
+        default: break
+        }
+        switch task {
+        case .coding: return 0.75
+        case .reasoning: return 0.70
+        case .writing: return 0.72
+        case .fast: return 0.98
+        case .vision: return 0.40
+        case .unknown: return 0.70
         }
     }
 

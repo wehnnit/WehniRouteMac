@@ -174,4 +174,70 @@ final class RouterTests: XCTestCase {
         XCTAssertEqual(decoded["free"]?.boolValue, true)
         XCTAssertEqual(decoded["items"]?.arrayValue?.count, 2)
     }
+    func testFreeTierModeRejectsPaidModels() {
+        let anthropic = ProviderConfig(kind: .anthropic)
+        let ollama = ProviderConfig(kind: .ollama)
+        let models = [
+            ModelConfig(providerID: anthropic.id, modelID: "claude-sonnet-4-5", contextWindow: 200_000, inputPerMillion: 3, outputPerMillion: 15),
+            ModelConfig(providerID: ollama.id, modelID: "llama3.1", contextWindow: 131_072, inputPerMillion: 0, outputPerMillion: 0, isFree: true),
+        ]
+        var config = config(providers: [anthropic, ollama], models: models)
+        config.routing.tierMode = .freeOnly
+        let ranked = Router.rank(config: config, health: [:], estimatedInputTokens: 900, task: .coding).candidates
+        XCTAssertFalse(ranked.contains { $0.providerID == "anthropic" })
+        XCTAssertEqual(ranked.first?.providerID, "ollama")
+    }
+
+    func testPaidTierModeRejectsFreeModels() {
+        let anthropic = ProviderConfig(kind: .anthropic)
+        let ollama = ProviderConfig(kind: .ollama)
+        let models = [
+            ModelConfig(providerID: anthropic.id, modelID: "claude-sonnet-4-5", contextWindow: 200_000, inputPerMillion: 3, outputPerMillion: 15),
+            ModelConfig(providerID: ollama.id, modelID: "llama3.1", contextWindow: 131_072, inputPerMillion: 0, outputPerMillion: 0, isFree: true),
+        ]
+        var config = config(providers: [anthropic, ollama], models: models)
+        config.routing.tierMode = .paidOnly
+        let ranked = Router.rank(config: config, health: [:], estimatedInputTokens: 900, task: .coding).candidates
+        XCTAssertFalse(ranked.contains { $0.providerID == "ollama" })
+        XCTAssertEqual(ranked.first?.providerID, "anthropic")
+    }
+
+    func testLegacyAllowPaidModelsAliasMapsToTierMode() {
+        var config = RoutingConfig()
+        config.allowPaidModels = false
+        XCTAssertEqual(config.tierMode, .freeOnly)
+        config.allowPaidModels = true
+        XCTAssertEqual(config.tierMode, .both)
+
+        // Decoding a legacy config (no tierMode key) still works.
+        let legacyJSON = """
+        {"strategy":"auto","allowPaidModels":false,"weights":{"taskFit":0.3,"health":0.25,"speed":0.15,"cost":0.15,"context":0.1,"quota":0.05},"fallbackAttempts":4}
+        """
+        let decoded = try? JSONDecoder().decode(RoutingConfig.self, from: Data(legacyJSON.utf8))
+        XCTAssertEqual(decoded?.tierMode, .freeOnly)
+    }
+
+    func testNewLocalEnginesScoreLikeOllama() {
+        let engines: [ProviderKind] = [.jan, .koboldcpp, .vllm, .mlxlm, .litellm, .lemonade]
+        for kind in engines {
+            XCTAssertEqual(
+                Router.taskFit(kind: kind, task: .coding, strategy: .auto),
+                Router.taskFit(kind: .ollama, task: .coding, strategy: .auto),
+                "\(kind.rawValue) must fit coding like ollama"
+            )
+            XCTAssertEqual(
+                Router.taskFit(kind: kind, task: .reasoning, strategy: .local),
+                1.0, "\(kind.rawValue) gets full fit under local strategy"
+            )
+            XCTAssertEqual(
+                Router.taskFit(kind: kind, task: .writing, strategy: .cheap),
+                1.0, "\(kind.rawValue) gets full fit under cheap strategy"
+            )
+            XCTAssertEqual(
+                Router.taskFit(kind: kind, task: .fast, strategy: .reliable),
+                0.6, "\(kind.rawValue) gets 0.6 under reliable strategy"
+            )
+        }
+    }
+
 }
