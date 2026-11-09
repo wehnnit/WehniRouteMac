@@ -5,6 +5,44 @@ struct ProvidersView: View {
     @EnvironmentObject private var store: AppStore
     @State private var pendingRemoval: ProviderConfig?
 
+    private var sourcesStrip: some View {
+        GlassCard(padding: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text("DETECTED ON THIS MAC")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.accent)
+                    Spacer()
+                    Button {
+                        Task { await store.scanLocalSources() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(IconButtonStyle())
+                    .disabled(store.scanningSources)
+                    .help("Rescan local sources")
+                }
+
+                if store.scanningSources {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Probing loopback ports and known installs…")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.muted)
+                    }
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 250, maximum: 330), spacing: 10)], spacing: 10) {
+                        ForEach(store.detectedSources) { source in
+                            SourceCard(source: source)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScreenHeader(
@@ -12,6 +50,19 @@ struct ProvidersView: View {
                 title: "Providers",
                 subtitle: "Connect the models you already trust. WehniRoute keeps every key in the macOS Keychain and routes through a single local endpoint."
             ) {
+                Picker("Tier", selection: Binding(
+                    get: { store.tierMode },
+                    set: { store.setTierMode($0) }
+                )) {
+                    ForEach(TierMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 240)
+                .labelsHidden()
+                .help(TierMode.allCases.first { $0 == store.tierMode }?.blurb ?? "")
+
                 HStack(spacing: 8) {
                     Button {
                         Task {
@@ -33,6 +84,37 @@ struct ProvidersView: View {
                 }
             }
 
+            if store.detectedSources.isEmpty && !store.scanningSources {
+                HStack(spacing: 10) {
+                    Image(systemName: "sensor.tag.radiowaves.right.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.faint)
+                    Text("Scan for local model sources — Ollama, LM Studio, Jan, GPT4All, KoboldCpp, llama.cpp, vLLM, MLX and more, plus Antigravity bridges and TalkNova")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
+                    Spacer()
+                    Button {
+                        Task { await store.scanLocalSources() }
+                    } label: {
+                        Label("Scan", systemImage: "dot.radiowaves.left.and.right")
+                    }
+                    .buttonStyle(GhostButtonStyle())
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.03))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Theme.stroke, lineWidth: 1)
+                )
+            }
+
+            if store.scanningSources || !store.detectedSources.isEmpty {
+                sourcesStrip
+            }
+
             HStack(alignment: .top, spacing: 12) {
                 Group {
                     if store.config.providers.isEmpty {
@@ -46,13 +128,24 @@ struct ProvidersView: View {
                             )
                         }
                     } else {
-                        LazyVGrid(
-                            columns: [GridItem(.flexible(), spacing: 12)],
-                            spacing: 12
-                        ) {
-                            ForEach(store.config.providers) { provider in
-                                ProviderCard(provider: provider) {
-                                    pendingRemoval = provider
+                        let visible = store.config.providers.filter { store.providerMatchesTier($0) }
+                        if visible.isEmpty {
+                            GlassCard {
+                                EmptyState(
+                                    symbol: "line.3.horizontal.decrease.circle",
+                                    title: "Nothing to route in this tier",
+                                    message: "No connected provider contributes enabled models to the \(store.tierMode.label.lowercased()) tier. Connect one or switch the tier mode above."
+                                )
+                            }
+                        } else {
+                            LazyVGrid(
+                                columns: [GridItem(.flexible(), spacing: 12)],
+                                spacing: 12
+                            ) {
+                                ForEach(visible) { provider in
+                                    ProviderCard(provider: provider) {
+                                        pendingRemoval = provider
+                                    }
                                 }
                             }
                         }
@@ -97,7 +190,19 @@ struct ProviderCard: View {
     }
 
     private var models: [ModelConfig] {
-        store.models(for: provider.id)
+        store.models(for: provider.id).filter(\.enabled)
+    }
+
+    @ViewBuilder
+    private var tierBadges: some View {
+        let free = models.filter(\.isFree).count
+        let paid = models.count - free
+        if free > 0 {
+                            Pill(text: "\(free) FREE", tint: Theme.green)
+        }
+        if paid > 0 {
+                            Pill(text: "\(paid) PAID", tint: Theme.blue)
+        }
     }
 
     private var isTesting: Bool {
@@ -137,6 +242,7 @@ struct ProviderCard: View {
                             if provider.kind.isLocal {
                                 Pill(text: "LOCAL", tint: Theme.violet)
                             }
+                            tierBadges
                         }
                         Text(provider.kind.tagline)
                             .font(.system(size: 10))
@@ -260,6 +366,7 @@ private struct ProviderStat: View {
 
 private struct ProviderSidebar: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var traces: TraceStore
 
     var body: some View {
         VStack(spacing: 12) {
@@ -313,7 +420,7 @@ private struct ProviderSidebar: View {
                         ProviderImpactDivider()
                         ProviderImpactStat(label: "MODELS", value: "\(store.config.models.count)")
                         ProviderImpactDivider()
-                        ProviderImpactStat(label: "TRACES", value: "\(store.traces.count)")
+                        ProviderImpactStat(label: "TRACES", value: "\(traces.traces.count)")
                     }
 
                     Button("Open routing lab") {
@@ -378,5 +485,91 @@ private struct ProviderImpactDivider: View {
             .fill(Theme.stroke)
             .frame(width: 1, height: 24)
             .padding(.horizontal, 9)
+    }
+}
+
+
+private struct SourceCard: View {
+    @EnvironmentObject private var store: AppStore
+    let source: LocalSourceCandidate
+    @State private var adopting = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+            }
+            .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(source.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.text)
+                    if source.connected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.green)
+                    }
+                }
+                Text(source.detail)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(Theme.faint)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if source.connected {
+                Button {
+                    adopting = true
+                    Task {
+                        await store.adoptLocalSource(source)
+                        await store.scanLocalSources()
+                        adopting = false
+                    }
+                } label: {
+                    Text(adopting ? "…" : "Refresh catalog")
+                }
+                .buttonStyle(GhostButtonStyle())
+                .disabled(adopting)
+                .help("Re-scan this source's catalog and import anything new")
+            } else {
+                Button {
+                    adopting = true
+                    Task {
+                        await store.adoptLocalSource(source)
+                        await store.scanLocalSources()
+                        adopting = false
+                    }
+                } label: {
+                    Text(adopting ? "…" : "Use")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(adopting)
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1)
+        )
+    }
+
+    private var icon: String {
+        if let kind = source.kind.kind {
+            return kind.symbol
+        }
+        switch source.kind {
+        case .antigravityBridge: return "arrow.triangle.branch"
+        case .talkNova: return "bubble.left.and.bubble.right.fill"
+        default: return "server.rack"
+        }
     }
 }
