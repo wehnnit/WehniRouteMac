@@ -192,6 +192,33 @@ struct RoutingView: View {
                     Spacer()
 
                     HStack(spacing: 7) {
+                        HStack(spacing: 2) {
+                            ForEach(FailoverScope.allCases) { scope in
+                                Button {
+                                    store.config.routing.failoverScope = scope
+                                    store.saveConfig()
+                                } label: {
+                                    Text(scope.label)
+                                        .font(.system(size: 9, weight: store.config.routing.failoverScope == scope ? .semibold : .medium))
+                                        .foregroundStyle(store.config.routing.failoverScope == scope ? Color(hex: 0x061014) : Theme.muted)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.6)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 4)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                .fill(store.config.routing.failoverScope == scope ? Theme.accent : Color.white.opacity(0.03))
+                                        )
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(2)
+                        .background(Capsule().fill(Color.black.opacity(0.18)))
+                        .overlay(Capsule().stroke(Theme.stroke, lineWidth: 0.8))
+                        .help(store.config.routing.failoverScope.blurb)
+
                         Text("ATTEMPTS")
                             .font(.system(size: 8, weight: .semibold, design: .monospaced))
                             .tracking(0.8)
@@ -219,6 +246,10 @@ struct RoutingView: View {
                 }
 
                 DividerLine().opacity(0.7)
+
+                Text(store.config.routing.failoverScope.blurb)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.faint)
 
                 if candidates.isEmpty {
                     Text("The ladder is empty until a provider has an enabled model.")
