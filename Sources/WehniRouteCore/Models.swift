@@ -669,11 +669,38 @@ public enum TierMode: String, Codable, Sendable, CaseIterable, Identifiable {
     }
 }
 
+/// How the router orders its fallback chain across the models it scored.
+/// `.global` interleaves the best models of every provider by score.
+/// `.withinProvider` exhausts each provider's models by score before moving
+/// to the next provider — useful when a provider's own models make natural
+/// backups for each other (e.g. several GGUF quants on one local engine).
+public enum FailoverScope: String, Codable, Sendable, CaseIterable, Identifiable {
+    case global
+    case withinProvider
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .global: return "Global"
+        case .withinProvider: return "Provider first"
+        }
+    }
+
+    public var blurb: String {
+        switch self {
+        case .global: return "Failover follows the global model ranking."
+        case .withinProvider: return "Try each provider's models by score before moving to the next provider."
+        }
+    }
+}
+
 public struct RoutingConfig: Codable, Sendable, Equatable {
     public var strategy: Strategy
     public var tierMode: TierMode
     public var weights: RoutingWeights
     public var fallbackAttempts: Int
+    public var failoverScope: FailoverScope
 
     /// Legacy alias kept for existing configs, exports, and call sites.
     public var allowPaidModels: Bool {
@@ -685,12 +712,14 @@ public struct RoutingConfig: Codable, Sendable, Equatable {
         strategy: Strategy = .auto,
         tierMode: TierMode = .both,
         weights: RoutingWeights = .balanced,
-        fallbackAttempts: Int = 4
+        fallbackAttempts: Int = 4,
+        failoverScope: FailoverScope = .global
     ) {
         self.strategy = strategy
         self.tierMode = tierMode
         self.weights = weights
         self.fallbackAttempts = fallbackAttempts
+        self.failoverScope = failoverScope
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -699,6 +728,7 @@ public struct RoutingConfig: Codable, Sendable, Equatable {
         case legacyAllowPaid = "allowPaidModels"
         case weights
         case fallbackAttempts
+        case failoverScope
     }
 
     public init(from decoder: Decoder) throws {
@@ -713,6 +743,7 @@ public struct RoutingConfig: Codable, Sendable, Equatable {
         }
         weights = try container.decodeIfPresent(RoutingWeights.self, forKey: .weights) ?? .balanced
         fallbackAttempts = try container.decodeIfPresent(Int.self, forKey: .fallbackAttempts) ?? 4
+        failoverScope = try container.decodeIfPresent(FailoverScope.self, forKey: .failoverScope) ?? .global
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -723,6 +754,7 @@ public struct RoutingConfig: Codable, Sendable, Equatable {
         try container.encode(allowPaidModels, forKey: .legacyAllowPaid)
         try container.encode(weights, forKey: .weights)
         try container.encode(fallbackAttempts, forKey: .fallbackAttempts)
+        try container.encode(failoverScope, forKey: .failoverScope)
     }
 }
 

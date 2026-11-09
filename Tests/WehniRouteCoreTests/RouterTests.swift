@@ -240,4 +240,34 @@ final class RouterTests: XCTestCase {
         }
     }
 
+    func testOrderedForFailoverGlobalKeepsScoreOrder() {
+        let candidates = [
+            Candidate(providerID: "p1", providerName: "P1", modelID: "a", modelName: "a", score: 0.90, reasons: [], isFree: true, apiFormat: .openAI, contextWindow: 128_000),
+            Candidate(providerID: "p2", providerName: "P2", modelID: "b", modelName: "b", score: 0.85, reasons: [], isFree: true, apiFormat: .openAI, contextWindow: 128_000),
+            Candidate(providerID: "p1", providerName: "P1", modelID: "c", modelName: "c", score: 0.80, reasons: [], isFree: true, apiFormat: .openAI, contextWindow: 128_000),
+        ]
+        XCTAssertEqual(Router.orderedForFailover(candidates, scope: .global).map(\.modelID), ["a", "b", "c"])
+    }
+
+    func testOrderedForFailoverWithinProviderGroupsByProvider() {
+        let candidates = [
+            // P1's best (0.90), then P2's best (0.86), then P1's weaker model (0.80),
+            // then P2's weaker model (0.70).
+            Candidate(providerID: "p1", providerName: "P1", modelID: "a", modelName: "a", score: 0.90, reasons: [], isFree: true, apiFormat: .openAI, contextWindow: 128_000),
+            Candidate(providerID: "p2", providerName: "P2", modelID: "b", modelName: "b", score: 0.86, reasons: [], isFree: true, apiFormat: .openAI, contextWindow: 128_000),
+            Candidate(providerID: "p1", providerName: "P1", modelID: "c", modelName: "c", score: 0.80, reasons: [], isFree: true, apiFormat: .openAI, contextWindow: 128_000),
+            Candidate(providerID: "p2", providerName: "P2", modelID: "d", modelName: "d", score: 0.70, reasons: [], isFree: true, apiFormat: .openAI, contextWindow: 128_000),
+        ]
+        let ordered = Router.orderedForFailover(candidates, scope: .withinProvider)
+        // Providers keep their score rank (P1 best 0.90 before P2 best 0.86), and
+        // each provider's models are exhausted by score before the next provider.
+        XCTAssertEqual(ordered.map(\.modelID), ["a", "c", "b", "d"])
+    }
+
+    func testRoutingConfigDecodesMissingFailoverScopeAsGlobal() throws {
+        let json = #"{"strategy":"auto","tierMode":"both","fallbackAttempts":3}"#.data(using: .utf8)!
+        let config = try JSONDecoder().decode(RoutingConfig.self, from: json)
+        XCTAssertEqual(config.failoverScope, .global)
+    }
+
 }

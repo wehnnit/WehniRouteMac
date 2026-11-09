@@ -236,7 +236,46 @@ public enum Router {
             }
             return $0.score > $1.score
         }
-        return (candidates, rejected)
+        let ordered = orderedForFailover(candidates, scope: config.routing.failoverScope)
+        return (ordered, rejected)
+    }
+
+    /// Reorders the flat candidate list for the fallback walk. Global scope
+    /// keeps the existing score-sorted order; withinProvider groups by
+    /// provider (providers ranked by their best model, then name for ties)
+    /// and orders models inside each group by score.
+    static func orderedForFailover(_ candidates: [Candidate], scope: FailoverScope) -> [Candidate] {
+        switch scope {
+        case .global:
+            return candidates
+        case .withinProvider:
+            var providerOrder: [String] = []
+            var bestByProvider: [String: Double] = [:]
+            var nameByProvider: [String: String] = [:]
+            var buckets: [String: [Candidate]] = [:]
+            for candidate in candidates {
+                if buckets[candidate.providerID] == nil {
+                    providerOrder.append(candidate.providerID)
+                    nameByProvider[candidate.providerID] = candidate.providerName
+                }
+                buckets[candidate.providerID, default: []].append(candidate)
+                bestByProvider[candidate.providerID] = max(
+                    bestByProvider[candidate.providerID] ?? -1,
+                    candidate.score
+                )
+            }
+            let rankedProviders = providerOrder.sorted { a, b in
+                let bestA = bestByProvider[a] ?? 0
+                let bestB = bestByProvider[b] ?? 0
+                if abs(bestA - bestB) > 0.0001 { return bestA > bestB }
+                let nameA = nameByProvider[a] ?? a
+                let nameB = nameByProvider[b] ?? b
+                return nameA.localizedCaseInsensitiveCompare(nameB) == .orderedAscending
+            }
+            return rankedProviders.flatMap { id in
+                (buckets[id] ?? []).sorted { $0.score > $1.score }
+            }
+        }
     }
 
     // MARK: - Scores
