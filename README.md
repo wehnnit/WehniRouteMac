@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.5.1" src="https://img.shields.io/badge/version-0.5.1-5EEAD4?style=flat-square">
+  <img alt="Version 0.6.0" src="https://img.shields.io/badge/version-0.6.0-5EEAD4?style=flat-square">
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-60A5FA?style=flat-square">
   <img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-A78BFA?style=flat-square">
 </p>
 
 WehniRoute is a native macOS control plane for model routing: a SwiftUI app backed by a loopback OpenAI- and Anthropic-compatible gateway. It scores every configured model on task fit, provider health, speed, cost, context headroom, and locality, then falls back through the ranked ladder while recording every attempt.
 
-**Version 0.5.1** removes the TalkNova launch pad: TalkNova's desktop client is a closed app with its cloud endpoints compiled into its binary and offers no configuration seam, so unlike the CLI harnesses (which are designed to be repointed through environment variables and generated config files) it cannot be routed through WehniRoute, and the launch pad shipped in 0.5.0 did not intercept its traffic. The supported way to use TalkNova with WehniRoute is the **TalkNova provider preset**: connect it with your personal `tn-live-…` key from TalkNova's Settings → API access, and its OpenAI-compatible catalog joins the routing ladder for every harness. The gateway continues to present a single **WehniRoute Auto** model to every client (`/v1/models` lists only `auto`; response bodies report `model: auto` while the trace log keeps the real selection). Claude Code, Hermes Agent, Pi, and DeepSeek have passed real gateway calls; Codex is wired but intentionally not exercised. OpenCode 2.0.26 currently ignores generated custom providers in its server runtime, so its launch card remains available but its model is not exposed by that release.
+**Version 0.6.0** adds 18 local inference engines (Jan, GPT4All, KoboldCpp, Text Generation WebUI, TabbyAPI, llama.cpp server, llamafile, LocalAI, Hugging Face TGI, MLX-LM, vLLM, llama-cpp-python, SGLang, mistral.rs, Xinference, Docker Model Runner, AMD Lemonade, and LiteLLM Proxy) as first-class providers with presets, $0 pricing, and one-click catalog import from **Providers → Scan**. Shared loopback ports are disambiguated by engine-specific probes rather than guessed, scanning probes every port concurrently, and llama.cpp is found on both 8080 and its new 9931 default. Routing gains a **Failover scope** option — **Global** (score-ordered) or **Provider first**, which exhausts a provider's own models by score before moving on — plus per-model health, so one misbehaving model cools down alone instead of taking its whole provider out of rotation. Every harness still sees the single **WehniRoute Auto** model (`/v1/models` lists only `auto`; response bodies report `model: auto`) while the trace log keeps the real provider and model that answered.
 
 ![Harnesses](docs/screenshots/05-harnesses.jpg)
 
@@ -26,12 +26,12 @@ WehniRoute is a native macOS control plane for model routing: a SwiftUI app back
 
 The release is **ad-hoc signed**, not notarized with a paid Apple Developer ID. The app is otherwise complete and auto-updating. On the first launch of a downloaded copy, macOS will block it. The tested macOS 26.5.2 flow is:
 
-1. Download `WehniRoute-0.4.2.zip` and `WehniRoute-0.4.2.zip.sha256` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
+1. Download `WehniRoute-0.6.0.zip` and `WehniRoute-0.6.0.zip.sha256` from [Releases](https://github.com/wehnnit/WehniRouteMac/releases/latest).
 2. Verify the download in Terminal:
 
    ```bash
    cd ~/Downloads
-   shasum -a 256 -c WehniRoute-0.4.2.zip.sha256
+   shasum -a 256 -c WehniRoute-0.6.0.zip.sha256
    ```
 
    The `.sha256` asset is the authoritative digest for the matching zip.
@@ -154,7 +154,7 @@ The script sets the gateway environment, prints the gateway URL, and then `exec`
 
 The bottom strip is always visible while the router is open:
 
-`LOCAL GATEWAY · 127.0.0.1:20128` · `macOS 26.5.2` · `Apache 2.0` · `v0.4.0 (5)` · `© 2026 wehnnit`
+`LOCAL GATEWAY · 127.0.0.1:20128` · `macOS 26.5.2` · `Apache 2.0` · `v0.6.0 (12)` · `© 2026 wehnnit`
 
 It reports the current loopback gateway port, the host macOS version, the project license, the app version/build, and the project owner. The same metadata is shown in Settings → About.
 
@@ -247,24 +247,24 @@ rm -rf Resources/AppIcon.iconset
 ## Release packaging
 
 ```bash
-bash scripts/package-release.sh 0.4.0
+bash scripts/package-release.sh 0.6.0
 ```
 
 This writes:
 
 ```text
-dist/releases/WehniRoute-0.4.0.zip
-dist/releases/WehniRoute-0.4.0.zip.sha256
+dist/releases/WehniRoute-0.6.0.zip
+dist/releases/WehniRoute-0.6.0.zip.sha256
 ```
 
 Publish with the GitHub CLI:
 
 ```bash
-gh release create v0.4.0 \
-  dist/releases/WehniRoute-0.4.0.zip \
-  dist/releases/WehniRoute-0.4.0.zip.sha256 \
-  --title "WehniRoute 0.4.0" \
-  --notes-file docs/release-notes-0.4.0.md
+gh release create v0.6.0 \
+  dist/releases/WehniRoute-0.6.0.zip \
+  dist/releases/WehniRoute-0.6.0.zip.sha256 \
+  --title "WehniRoute 0.6.0" \
+  --notes-file docs/release-notes-0.6.0.md
 ```
 
 The updater only needs the release to be public and to contain both assets. Do not rename or remove the `.sha256` asset.
@@ -381,7 +381,7 @@ scripts/
 docs/
   assets/                 Logo exports
   screenshots/            Current window captures
-  release-notes-0.5.1.md  Release notes
+  release-notes-0.6.0.md  Release notes
 ```
 
 Configuration and traces live at:
