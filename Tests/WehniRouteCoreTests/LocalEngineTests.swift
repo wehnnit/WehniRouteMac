@@ -78,4 +78,125 @@ final class LocalEngineTests: XCTestCase {
             XCTAssertEqual(parsed.first { $0.modelID == "llama-3.2-1b" }?.contextWindow, kind.defaultContextWindow, "\(kind.rawValue) falls back to default context")
         }
     }
+
+    func testUniquePortsMapDirectlyToKinds() {
+        let expectations: [Int: ProviderKind] = [
+            1337: .jan, 4891: .gpt4all, 5001: .koboldcpp, 30000: .sglang,
+            9997: .xinference, 12434: .dockermodelrunner, 13305: .lemonade,
+            4000: .litellm, 11434: .ollama,
+        ]
+        for (port, kind) in expectations {
+            let probes = [LocalProbeResult(path: "/v1/models", status: 200,
+                                           json: .object(["data": .array([.object(["id": .string("m")])])]))]
+            XCTAssertEqual(LocalEndpointClassifier.classify(port: port, probes: probes), kind)
+        }
+    }
+
+    func testLLamaCppIsDiscoveredOnBoth8080And9931() {
+        let okHealth = LocalProbeResult(path: "/health", status: 200,
+                                        json: .object(["status": .string("ok")]))
+        XCTAssertEqual(LocalEndpointClassifier.classify(port: 8080, probes: [okHealth]), .llamacpp)
+        XCTAssertEqual(LocalEndpointClassifier.classify(port: 9931, probes: [okHealth]), .llamacpp)
+        XCTAssertEqual(LocalEngineCatalog.byPort(9931).map(\.kind), [.llamacpp])
+    }
+
+    func testPort8080Disambiguation() {
+        func models(_ ids: [String]) -> LocalProbeResult {
+            .init(path: "/v1/models", status: 200,
+                  json: .object(["data": .array(ids.map { .object(["id": .string($0)]) })]))
+        }
+        // LocalAI answers /readyz
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 8080, probes: [
+                .init(path: "/readyz", status: 200, json: nil, text: "ok"), models(["gpt4all"]),
+            ]),
+            .localai
+        )
+        // TGI answers /health with an empty 200 body
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 8080, probes: [
+                .init(path: "/health", status: 200, json: nil, text: ""), models(["t5-small"]),
+            ]),
+            .tgi
+        )
+        // llama.cpp / llamafile answer /health with {"status":"ok"}
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 8080, probes: [
+                .init(path: "/health", status: 200, json: .object(["status": .string("ok")]), text: nil), models(["qwen"]),
+            ]),
+            .llamacpp
+        )
+        // MLX models betray the MLX server even on 8080
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 8080, probes: [
+                models(["mlx-community/Llama-3.2-1B-4bit"]),
+            ]),
+            .mlxlm
+        )
+        // Nothing identifiable → nil (the scanner keeps its Antigravity fallback)
+        XCTAssertNil(LocalEndpointClassifier.classify(port: 8080, probes: [
+            .init(path: "/health", status: 404, json: nil, text: nil),
+            .init(path: "/v1/models", status: 404, json: nil, text: nil),
+        ]))
+    }
+
+    func testPort8000Disambiguation() {
+        // vLLM exposes Prometheus metrics mentioning itself
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 8000, probes: [
+                .init(path: "/metrics", status: 200, json: nil, text: "# HELP vllm:num_requests_running vllm:foo\n"),
+            ]),
+            .vllm
+        )
+        // llama-cpp-python answers /health with {"status":"ok"}
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 8000, probes: [
+                .init(path: "/health", status: 200, json: .object(["status": .string("ok")])),
+            ]),
+            .llamacpppython
+        )
+    }
+
+    func testPort5000And1234Disambiguation() {
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 5000, probes: [
+                .init(path: "/openapi.json", status: 200, json: .object(["info": .object(["title": .string("TabbyAPI")])])),
+            ]),
+            .tabbyapi
+        )
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 5000, probes: [
+                .init(path: "/openapi.json", status: 404, json: nil, text: nil),
+                .init(path: "/v1/models", status: 200, json: .object(["data": .array([])])),
+            ]),
+            .textgenwebui
+        )
+        // LM Studio's own v0 API marks the real LM Studio on 1234
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 1234, probes: [
+                .init(path: "/api/v0/models", status: 200, json: .object(["data": .array([])])),
+            ]),
+            .lmstudio
+        )
+        XCTAssertEqual(
+            LocalEndpointClassifier.classify(port: 1234, probes: [
+                .init(path: "/api/v0/models", status: 404, json: nil, text: nil),
+                .init(path: "/v1/models", status: 200, json: .object(["data": .array([.object(["id": .string("m")])])])),
+            ]),
+            .mistralrs
+        )
+    }
+
+    func testCatalogCoversEveryLocalEngine() {
+        for kind in ProviderKind.localEngines {
+            XCTAssertTrue(LocalEngineCatalog.engines.contains { $0.kind == kind },
+                          "catalog missing \(kind.rawValue)")
+        }
+        // Shared ports return multiple candidate engines so the scanner probes
+        // every disambiguation path.
+        XCTAssertEqual(LocalEngineCatalog.byPort(8080).count, 5)
+        XCTAssertEqual(LocalEngineCatalog.byPort(8000).count, 2)
+        XCTAssertEqual(LocalEngineCatalog.byPort(5000).count, 2)
+        XCTAssertEqual(LocalEngineCatalog.byPort(1234).count, 2)
+    }
 }
