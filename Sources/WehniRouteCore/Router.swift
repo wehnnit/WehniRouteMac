@@ -142,16 +142,29 @@ public enum Router {
             }
 
             for model in models {
-                if !config.routing.allowPaidModels && !model.isFree {
+                switch config.routing.tierMode {
+                case .freeOnly where !model.isFree:
                     rejected.append(
                         Rejection(
                             providerID: provider.id,
                             providerName: provider.name,
                             modelID: model.modelID,
-                            reason: "Paid model while paid routing is off"
+                            reason: "Paid model while Free-tier routing is on"
                         )
                     )
                     continue
+                case .paidOnly where model.isFree:
+                    rejected.append(
+                        Rejection(
+                            providerID: provider.id,
+                            providerName: provider.name,
+                            modelID: model.modelID,
+                            reason: "Free model while Paid-tier routing is on"
+                        )
+                    )
+                    continue
+                default:
+                    break
                 }
 
                 if estimatedInputTokens > model.contextWindow {
@@ -238,8 +251,9 @@ public enum Router {
         if strategy == .reliable {
             switch kind {
             case .anthropic, .openai, .google: return 0.9
-            case .groq, .openrouter: return 0.8
-            case .ollama, .simulation: return 0.6
+            case .groq, .openrouter, .mistral, .xai, .deepseek: return 0.8
+            case .together, .cerebras, .fireworks, .moonshot, .nvidia: return 0.75
+            case .ollama, .lmstudio, .simulation, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.6
             case .talkNova: return 0.75
             case .custom: return 0.7
             }
@@ -252,11 +266,19 @@ public enum Router {
             case .openai: return 0.97
             case .google: return 0.90
             case .openrouter: return 0.86
+            case .mistral: return 0.86
+            case .xai: return 0.88
+            case .deepseek: return 0.85
             case .groq: return 0.70
+            case .together: return 0.78
+            case .cerebras: return 0.76
+            case .fireworks: return 0.74
+            case .moonshot: return 0.73
+            case .nvidia: return 0.73
             case .custom: return 0.72
-            case .ollama: return 0.60
             case .talkNova: return 0.76
             case .simulation: return 0.75
+            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.60
             }
         case .reasoning:
             switch kind {
@@ -264,11 +286,19 @@ public enum Router {
             case .openai: return 0.96
             case .google: return 0.92
             case .openrouter: return 0.85
+            case .mistral: return 0.84
+            case .xai: return 0.86
+            case .deepseek: return 0.84
             case .groq: return 0.78
+            case .together: return 0.74
+            case .cerebras: return 0.72
+            case .fireworks: return 0.72
+            case .moonshot: return 0.71
+            case .nvidia: return 0.71
             case .custom: return 0.70
-            case .ollama: return 0.58
             case .talkNova: return 0.71
             case .simulation: return 0.70
+            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.58
             }
         case .writing:
             switch kind {
@@ -276,23 +306,39 @@ public enum Router {
             case .anthropic: return 0.96
             case .google: return 0.92
             case .openrouter: return 0.86
+            case .mistral: return 0.84
+            case .xai: return 0.85
+            case .deepseek: return 0.84
             case .groq: return 0.75
+            case .together: return 0.74
+            case .cerebras: return 0.72
+            case .fireworks: return 0.72
+            case .moonshot: return 0.71
+            case .nvidia: return 0.71
             case .custom: return 0.70
-            case .ollama: return 0.62
             case .talkNova: return 0.73
             case .simulation: return 0.72
+            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.62
             }
         case .fast:
             switch kind {
             case .groq: return 1.0
-            case .talkNova: return 0.80
             case .simulation: return 0.98
             case .google: return 0.90
+            case .deepseek: return 0.86
             case .openai: return 0.86
+            case .cerebras: return 0.85
+            case .together: return 0.80
+            case .fireworks: return 0.78
             case .anthropic: return 0.82
+            case .xai: return 0.74
+            case .mistral: return 0.76
             case .openrouter: return 0.78
+            case .moonshot: return 0.74
+            case .nvidia: return 0.72
             case .custom: return 0.65
-            case .ollama: return 0.58
+            case .talkNova: return 0.80
+            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.58
             }
         case .vision:
             switch kind {
@@ -300,11 +346,19 @@ public enum Router {
             case .openai: return 0.95
             case .anthropic: return 0.92
             case .openrouter: return 0.85
+            case .xai: return 0.80
             case .groq: return 0.70
+            case .mistral: return 0.66
+            case .together: return 0.62
+            case .fireworks: return 0.62
+            case .cerebras: return 0.58
+            case .deepseek: return 0.62
+            case .moonshot: return 0.58
+            case .nvidia: return 0.56
             case .custom: return 0.60
-            case .ollama: return 0.50
-            case .talkNova: return 0.55
+            case .talkNova: return 0.62
             case .simulation: return 0.40
+            case .ollama, .lmstudio, .jan, .gpt4all, .koboldcpp, .textgenwebui, .tabbyapi, .llamacpp, .llamafile, .localai, .tgi, .mlxlm, .vllm, .llamacpppython, .sglang, .mistralrs, .xinference, .dockermodelrunner, .lemonade, .litellm: return 0.50
             }
         case .unknown:
             return 0.7
