@@ -270,4 +270,58 @@ final class RouterTests: XCTestCase {
         XCTAssertEqual(config.failoverScope, .global)
     }
 
+    func testModelHealthCooldownRejectsOnlyThatModel() {
+        var config = AppConfig(
+            providers: [
+                ProviderConfig(kind: .simulation),
+            ],
+            models: [
+                ModelConfig(providerID: "simulation", modelID: "sim-echo"),
+            ],
+            routing: RoutingConfig()
+        )
+        config.models.append(ModelConfig(providerID: "simulation", modelID: "sim-second"))
+
+        let cooling = Date().addingTimeInterval(60)
+        let modelHealth = [
+            "simulation/sim-second": HealthSnapshot(state: .down, cooldownUntil: cooling),
+        ]
+
+        let ranking = Router.rank(
+            config: config,
+            health: [:],
+            modelHealth: modelHealth,
+            estimatedInputTokens: 100,
+            task: .fast
+        )
+
+        XCTAssertFalse(ranking.candidates.contains { $0.modelID == "sim-second" })
+        XCTAssertTrue(ranking.candidates.contains { $0.modelID == "sim-echo" })
+        XCTAssertTrue(ranking.rejected.contains { $0.modelID == "sim-second" && $0.reason.contains("Circuit open") })
+    }
+
+    func testModelHealthSnapshotDrivesHealthScore() {
+        var config = AppConfig(
+            providers: [ProviderConfig(kind: .simulation)],
+            models: [ModelConfig(providerID: "simulation", modelID: "sim-echo")]
+        )
+
+        let healthyAtProvider = Router.rank(
+            config: config,
+            health: ["simulation": HealthSnapshot(state: .healthy)],
+            estimatedInputTokens: 100,
+            task: .fast
+        ).candidates[0]
+
+        let degradedAtModel = Router.rank(
+            config: config,
+            health: ["simulation": HealthSnapshot(state: .healthy)],
+            modelHealth: ["simulation/sim-echo": HealthSnapshot(state: .degraded)],
+            estimatedInputTokens: 100,
+            task: .fast
+        ).candidates[0]
+
+        XCTAssertGreaterThan(healthyAtProvider.score, degradedAtModel.score)
+    }
+
 }

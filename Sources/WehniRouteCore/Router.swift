@@ -105,6 +105,7 @@ public enum Router {
     public static func rank(
         config: AppConfig,
         health: [String: HealthSnapshot],
+        modelHealth: [String: HealthSnapshot] = [:],
         estimatedInputTokens: Int,
         task: TaskType,
         now: Date = Date(),
@@ -128,14 +129,14 @@ public enum Router {
                 continue
             }
 
-            let snapshot = health[provider.id] ?? HealthSnapshot()
-            if snapshot.isCoolingDown(at: now) {
+            let providerSnapshot = health[provider.id] ?? HealthSnapshot()
+            if providerSnapshot.isCoolingDown(at: now) {
                 rejected.append(
                     Rejection(
                         providerID: provider.id,
                         providerName: provider.name,
                         modelID: "—",
-                        reason: "Circuit open until \(snapshot.cooldownUntil?.formatted(date: .omitted, time: .shortened) ?? "later")"
+                        reason: "Circuit open until \(providerSnapshot.cooldownUntil?.formatted(date: .omitted, time: .shortened) ?? "later")"
                     )
                 )
                 continue
@@ -174,6 +175,21 @@ public enum Router {
                             providerName: provider.name,
                             modelID: model.modelID,
                             reason: "Context \(Format.compact(estimatedInputTokens)) exceeds \(Format.compact(model.contextWindow))"
+                        )
+                    )
+                    continue
+                }
+
+                let modelKey = "\(provider.id)/\(model.modelID)"
+                let snapshot = modelHealth[modelKey] ?? providerSnapshot
+
+                if snapshot.isCoolingDown(at: now) {
+                    rejected.append(
+                        Rejection(
+                            providerID: provider.id,
+                            providerName: provider.name,
+                            modelID: model.modelID,
+                            reason: "Circuit open until \(snapshot.cooldownUntil?.formatted(date: .omitted, time: .shortened) ?? "later")"
                         )
                     )
                     continue
