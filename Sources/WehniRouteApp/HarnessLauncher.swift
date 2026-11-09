@@ -214,6 +214,7 @@ final class HarnessLauncher: ObservableObject {
             guard store.gatewayStatus.isRunning else {
                 throw HarnessLaunchError.gatewayOffline
             }
+            store.setActiveHarness(harness.name)
 
             let script = try makeScript(for: harness, store: store)
             try openInTerminal(script)
@@ -302,11 +303,14 @@ final class HarnessLauncher: ObservableObject {
             .joined(separator: " ")
         let workingDirectory = spec.workingDirectory.map { "cd \(shellQuote($0))\n" } ?? ""
 
+        let registerJSON = "{\"harness\":\"\(harness.name)\"}"
         let body = """
         #!/bin/zsh
         set -euo pipefail
 
         \(exports)
+
+        curl -s -o /dev/null --max-time 2 -X POST "http://127.0.0.1:\(store.config.gatewayPort)/v1/harness-session" -H 'Content-Type: application/json' -d '\(registerJSON)' 2>/dev/null || true
 
         echo "WehniRoute · \(harness.name)"
         echo "Gateway · \(store.gatewayURL)"

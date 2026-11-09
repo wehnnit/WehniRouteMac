@@ -3,6 +3,7 @@ import WehniRouteCore
 
 struct OverviewView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var traces: TraceStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -93,32 +94,32 @@ struct OverviewView: View {
         ) {
             MetricCard(
                 title: "Requests",
-                value: "\(store.traces.count)",
-                detail: "\(store.hourRequestCount) in the last hour",
+                value: "\(traces.traces.count)",
+                detail: "\(traces.hourRequestCount) in the last hour",
                 symbol: "arrow.up.right",
                 tint: Theme.accent,
                 values: requestSpark
             )
             MetricCard(
                 title: "Success",
-                value: store.successRate.map { "\(Int(($0 * 100).rounded()))%" } ?? "—",
-                detail: "\(store.traces.filter(\.isSuccess).count) clean routes",
+                value: traces.successRate.map { "\(Int(($0 * 100).rounded()))%" } ?? "—",
+                detail: "\(traces.traces.filter(\.isSuccess).count) clean routes",
                 symbol: "checkmark.seal.fill",
                 tint: Theme.green,
                 values: successSpark
             )
             MetricCard(
                 title: "Avg latency",
-                value: store.averageLatencyMS.map(Format.latency) ?? "—",
+                value: traces.averageLatencyMS.map(Format.latency) ?? "—",
                 detail: "end-to-end route time",
                 symbol: "speedometer",
                 tint: Theme.amber,
-                values: store.sparklineValues()
+                values: traces.sparklineValues()
             )
             MetricCard(
                 title: "Spend",
-                value: Format.money(store.totalCost),
-                detail: "\(Format.compact(store.totalTokens)) tokens routed",
+                value: Format.money(traces.totalCost),
+                detail: "\(Format.compact(traces.totalTokens)) tokens routed",
                 symbol: "creditcard.fill",
                 tint: Theme.violet,
                 values: costSpark
@@ -127,19 +128,19 @@ struct OverviewView: View {
     }
 
     private var requestSpark: [Double] {
-        let samples = Array(store.traces.prefix(24).reversed())
+        let samples = Array(traces.traces.prefix(24).reversed())
         guard !samples.isEmpty else { return [] }
         return samples.enumerated().map { Double($1.totalTokens + $0 + 1) }
     }
 
     private var successSpark: [Double] {
-        let samples = Array(store.traces.prefix(24).reversed())
+        let samples = Array(traces.traces.prefix(24).reversed())
         guard !samples.isEmpty else { return [] }
         return samples.map { $0.isSuccess ? 1 : 0 }
     }
 
     private var costSpark: [Double] {
-        let samples = Array(store.traces.prefix(24).reversed())
+        let samples = Array(traces.traces.prefix(24).reversed())
         guard !samples.isEmpty else { return [] }
         return samples.map { $0.costUSD + 0.001 }
     }
@@ -228,9 +229,10 @@ private struct SetupStep: View {
 
 private struct TrafficCard: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var traces: TraceStore
 
     private var samples: [Trace] {
-        Array(store.traces.prefix(28).reversed())
+        Array(traces.traces.prefix(28).reversed())
     }
 
     var body: some View {
@@ -268,11 +270,11 @@ private struct TrafficCard: View {
                 }
 
                 HStack(spacing: 0) {
-                    TrafficStat(label: "p50", value: store.averageLatencyMS.map(Format.latency) ?? "—")
+                    TrafficStat(label: "p50", value: traces.averageLatencyMS.map(Format.latency) ?? "—")
                     TrafficDivider()
-                    TrafficStat(label: "fallback", value: store.fallbackRate.map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
+                    TrafficStat(label: "fallback", value: traces.fallbackRate.map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
                     TrafficDivider()
-                    TrafficStat(label: "tokens", value: Format.compact(store.totalTokens))
+                    TrafficStat(label: "tokens", value: Format.compact(traces.totalTokens))
                 }
             }
         }
@@ -386,9 +388,10 @@ private struct TrafficDivider: View {
 
 private struct RecentTracesCard: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var traces: TraceStore
 
     private var recent: [Trace] {
-        Array(store.traces.prefix(5))
+        Array(traces.traces.prefix(5))
     }
 
     var body: some View {
@@ -422,7 +425,7 @@ private struct RecentTracesCard: View {
                 } else {
                     ForEach(recent) { trace in
                         CompactTraceRow(trace: trace) {
-                            store.selectedTraceID = trace.id
+                            traces.selectedTraceID = trace.id
                             store.section = .traces
                         }
                         if trace.id != recent.last?.id {

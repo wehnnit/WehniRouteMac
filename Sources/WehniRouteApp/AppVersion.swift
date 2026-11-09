@@ -40,5 +40,5 @@ enum SupportDirectory {
 }
 
 extension AppConfig {
-    static let latestSchemaVersion = 2
+    static let latestSchemaVersion = 3
 }

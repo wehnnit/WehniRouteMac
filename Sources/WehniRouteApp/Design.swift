@@ -16,10 +16,11 @@ extension Color {
 enum Theme {
     static let backgroundTop = Color(hex: 0x060A12)
     static let backgroundBottom = Color(hex: 0x0A1120)
-    static let surface = Color.white.opacity(0.045)
-    static let surfaceStrong = Color.white.opacity(0.07)
-    static let stroke = Color.white.opacity(0.08)
-    static let strokeStrong = Color.white.opacity(0.14)
+    static let surface = Color.white.opacity(0.03)
+    static let surfaceStrong = Color.white.opacity(0.055)
+    static let surfaceSubtle = Color.black.opacity(0.22)
+    static let stroke = Color.white.opacity(0.065)
+    static let strokeStrong = Color.white.opacity(0.13)
     static let text = Color(hex: 0xEAF2FF)
     static let muted = Color(hex: 0x8FA0BA)
     static let faint = Color(hex: 0x5E6E88)
@@ -46,13 +47,13 @@ struct AppBackground: View {
                 endPoint: .bottomTrailing
             )
             RadialGradient(
-                colors: [Theme.accent.opacity(0.13), .clear],
+                colors: [Theme.accent.opacity(0.09), .clear],
                 center: .topTrailing,
                 startRadius: 10,
                 endRadius: 780
             )
             RadialGradient(
-                colors: [Theme.violet.opacity(0.11), .clear],
+                colors: [Theme.violet.opacity(0.07), .clear],
                 center: .bottomLeading,
                 startRadius: 10,
                 endRadius: 720
@@ -104,7 +105,7 @@ struct GlassCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
                     .stroke(Theme.stroke, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.28), radius: 22, x: 0, y: 12)
+            .shadow(color: .black.opacity(0.16), radius: 12, x: 0, y: 6)
     }
 }
 
@@ -181,9 +182,10 @@ struct ScreenHeader<Trailing: View>: View {
                     Text(eyebrow.uppercased())
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
                         .tracking(1.7)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.muted)
                     Text(title)
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .font(.system(size: 33, weight: .semibold))
+                        .kerning(-0.6)
                         .foregroundStyle(Theme.text)
                 }
                 Spacer(minLength: 12)
@@ -292,7 +294,8 @@ struct MetricCard: View {
                         .foregroundStyle(tint)
                 }
                 Text(value)
-                    .font(.system(size: 27, weight: .semibold, design: .rounded))
+                    .font(.system(size: 30, weight: .medium, design: .monospaced))
+                    .kerning(-0.5)
                     .foregroundStyle(Theme.text)
                     .contentTransition(.numericText())
                 Sparkline(values: values, tint: tint)

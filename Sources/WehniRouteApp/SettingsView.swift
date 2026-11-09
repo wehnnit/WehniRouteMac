@@ -3,6 +3,7 @@ import WehniRouteCore
 
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var traces: TraceStore
     @EnvironmentObject private var updates: UpdateManager
     @StateObject private var harnessLauncher = HarnessLauncher()
     @State private var portText = ""
@@ -37,6 +38,9 @@ struct SettingsView: View {
                 aboutCard
             }
 
+            discordCard
+                .padding(.top, 12)
+
             harnessesCard
                 .padding(.top, 12)
 
@@ -45,6 +49,7 @@ struct SettingsView: View {
         }
         .onAppear {
             portText = String(store.config.gatewayPort)
+            store.startPresence()
             Task { await harnessLauncher.refresh() }
         }
         .confirmationDialog(
@@ -183,7 +188,7 @@ struct SettingsView: View {
                 SettingsHeading(symbol: "externaldrive.fill", title: "Local data")
 
                 KeyValueRow(label: "Config", value: "native-config.json", mono: true)
-                KeyValueRow(label: "Traces", value: "\(store.traces.count) records", mono: true)
+                KeyValueRow(label: "Traces", value: "\(traces.traces.count) records", mono: true)
                 KeyValueRow(label: "Provider keys", value: "macOS Keychain", mono: true)
 
                 HStack(spacing: 7) {
@@ -215,6 +220,94 @@ struct SettingsView: View {
                     .truncationMode(.middle)
             }
         }
+    }
+
+
+    private var discordCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                Text("DISCORD PRESENCE")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.faint)
+                Spacer()
+                presenceChip
+            }
+
+            Text(presenceHeadline)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.text)
+
+            Text("Automatic and permanent — nothing to enable, nothing to configure. Your profile shows which tab you're in, and while traffic flows it shows the harness and the exact model the router picked. Never keys, prompts, or message content.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: store.presence.state == .connected
+                      ? "checkmark.circle.fill"
+                      : "clock.arrow.circlepath")
+                    .font(.system(size: 10))
+                    .foregroundStyle(store.presence.state == .connected ? Theme.green : Theme.amber)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(store.presence.statusMessage)
+                        .font(.system(size: 10))
+                        .foregroundStyle(store.presence.state == .connected ? Theme.muted : Theme.faint)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if store.presence.state == .connected, !store.presence.lastSentSummary.isEmpty {
+                        Text("On your profile: \(store.presence.lastSentSummary)")
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundStyle(Theme.faint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            Button("Reconnect now") {
+                store.startPresence()
+            }
+            .buttonStyle(GhostButtonStyle())
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+                .fill(Theme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1)
+        )
+    }
+
+    private var presenceHeadline: String {
+        switch store.presence.state {
+        case .connected: return "Linked to Discord"
+        case .connecting: return "Linking to Discord…"
+        case .disconnected: return "Waiting for Discord"
+        case .disabled: return "Presence unavailable"
+        }
+    }
+
+    private var presenceChip: some View {
+        let connected = store.presence.state == .connected
+        return HStack(spacing: 5) {
+            Circle()
+                .fill(connected ? Theme.green : Theme.amber)
+                .frame(width: 5, height: 5)
+                .shadow(color: (connected ? Theme.green : Theme.amber).opacity(0.8), radius: 3)
+            Text(connected ? "LIVE" : "IDLE")
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .tracking(0.8)
+                .foregroundStyle(connected ? Theme.green : Theme.amber)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill((connected ? Theme.green : Theme.amber).opacity(0.1)))
+        .overlay(Capsule().stroke((connected ? Theme.green : Theme.amber).opacity(0.25), lineWidth: 0.8))
     }
 
     private var aboutCard: some View {

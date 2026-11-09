@@ -15,6 +15,7 @@ struct WehniRouteApp: App {
                 }
             }
             .environmentObject(store)
+            .environmentObject(store.traceStore)
             .environmentObject(updates)
             .task {
                 if !store.needsSetup {
@@ -27,6 +28,14 @@ struct WehniRouteApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
+
+            // Appended after text editing so cut/copy/paste stay untouched.
+            CommandGroup(after: .textEditing) {
+                Button("Find Model…") {
+                    store.requestModelSearch()
+                }
+                .keyboardShortcut("f", modifiers: [.command])
+            }
 
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {

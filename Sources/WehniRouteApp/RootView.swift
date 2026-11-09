@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import WehniRouteCore
@@ -43,6 +44,18 @@ struct RootView: View {
         }
         .frame(minWidth: Theme.minWindowWidth, minHeight: Theme.minWindowHeight)
         .preferredColorScheme(.dark)
+        .onChange(of: store.section) { _, _ in
+            store.refreshSectionPresence()
+        }
+        .onAppear {
+            store.startPresence()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            store.startPresence()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            store.dimPresenceForBackground()
+        }
         .overlay(alignment: .top) {
             if let toast = store.toastMessage {
                 ToastBanner(toast: toast)
@@ -55,7 +68,7 @@ struct RootView: View {
             AddProviderSheet()
         }
         .sheet(isPresented: $store.showAddModel) {
-            AddModelSheet()
+            AddModelSheet(prefillModelID: store.pendingModelID)
         }
     }
 
@@ -263,6 +276,7 @@ private struct GatewayMiniCard: View {
 
 private struct TopBar: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var traces: TraceStore
 
     private var gatewayTint: Color {
         if case .running = store.gatewayStatus { return Theme.green }
@@ -292,29 +306,33 @@ private struct TopBar: View {
 
             Spacer()
 
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Theme.faint)
-                TextField("Search routes", text: $store.search)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 10))
-                    .foregroundStyle(Theme.text)
-                if !store.search.isEmpty {
-                    Button {
-                        store.search = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(Theme.faint)
+            // Only Traces consumes `traceStore.search`; showing the box on the
+            // other six tabs was a dead control.
+            if store.section == .traces {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Theme.faint)
+                    TextField("Search routes", text: $traces.search)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.text)
+                    if !traces.search.isEmpty {
+                        Button {
+                            traces.search = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Theme.faint)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 10)
+                .frame(width: 180, height: 27)
+                .background(Capsule().fill(Color.black.opacity(0.18)))
+                .overlay(Capsule().stroke(Theme.stroke, lineWidth: 0.8))
             }
-            .padding(.horizontal, 10)
-            .frame(width: 180, height: 27)
-            .background(Capsule().fill(Color.black.opacity(0.18)))
-            .overlay(Capsule().stroke(Theme.stroke, lineWidth: 0.8))
 
             Button {
                 store.copyGatewayURL()

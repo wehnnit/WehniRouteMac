@@ -52,6 +52,14 @@ struct AddProviderSheet: View {
     @State private var displayName = ""
     @State private var showKey = false
 
+    enum Stage: Equatable { case configure, scanning, results }
+    @State private var stage: Stage = .configure
+    @State private var connectedProviderID: String?
+    @State private var discovered: [DiscoveredModel] = []
+    @State private var selected: Set<String> = []
+    @State private var customModelID = ""
+    @State private var customContext = "128000"
+
     private var canAdd: Bool {
         if kind == .custom {
             return !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -66,13 +74,19 @@ struct AddProviderSheet: View {
         VStack(spacing: 0) {
             header
             DividerLine()
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 20) {
-                    presetSection
-                    detailsSection
-                    securityNote
+            if stage == .results {
+                discoveryResults
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        presetSection
+                        detailsSection
+                        securityNote
+                    }
+                    .padding(24)
                 }
-                .padding(24)
+                .disabled(stage == .scanning)
+                .opacity(stage == .scanning ? 0.55 : 1)
             }
             DividerLine()
             footer
@@ -271,25 +285,209 @@ struct AddProviderSheet: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text("The connection is tested immediately.")
+            Text(footerHint)
                 .font(.system(size: 10))
                 .foregroundStyle(Theme.faint)
             Spacer()
-            Button("Cancel") { dismiss() }
-                .buttonStyle(GhostButtonStyle())
-            Button {
-                add()
-            } label: {
-                Label("Add & test", systemImage: "plus")
+            if stage == .results {
+                Button("Done") { dismiss() }
+                    .buttonStyle(GhostButtonStyle())
+                Button {
+                    importSelected()
+                } label: {
+                    Label("Add \(selected.count) models", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(selected.isEmpty)
+                .opacity(selected.isEmpty ? 0.45 : 1)
+            } else {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(GhostButtonStyle())
+                Button {
+                    connectAndScan()
+                } label: {
+                    Label(stage == .scanning ? "Scanning…" : "Connect & scan models", systemImage: stage == .scanning ? "arrow.triangle.2.circlepath" : "plus")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!canAdd || stage == .scanning)
+                .opacity(canAdd && stage != .scanning ? 1 : 0.45)
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(!canAdd)
-            .opacity(canAdd ? 1 : 0.45)
         }
         .padding(18)
     }
 
-    private func add() {
+    private var footerHint: String {
+        switch stage {
+        case .configure: return "The connection is scanned immediately after adding."
+        case .scanning: return "Asking \(kind.displayName) for its model catalog…"
+        case .results: return "Pick the models the router may consider. Tiers come from the provider's own catalog."
+        }
+    }
+
+    // MARK: - Discovery results
+
+    private var discoveryResults: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("MODEL CATALOG")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.accent)
+                        Text("\(discovered.count) models discovered")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(Theme.text)
+                    }
+                    Spacer()
+                    if let providerID = connectedProviderID,
+                       let provider = store.provider(id: providerID) {
+                        ProviderGlyph(kind: provider.kind, size: 34)
+                    }
+                }
+
+                tierSection(.free, title: "Free models")
+                tierSection(.paid, title: "Paid models")
+                tierSection(.unknown, title: "Unverified tier")
+
+                customModelSection
+            }
+            .padding(24)
+        }
+    }
+
+    private func tierSection(_ tier: DiscoveryTier, title: String) -> some View {
+        let models = discovered.filter { $0.tier == tier }
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundStyle(tier == .free ? Theme.green : Theme.muted)
+                Text("\(models.count)")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Theme.faint)
+                Spacer()
+            }
+            if models.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: tier == .free ? "tray" : "xmark.bin")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.faint)
+                    Text(tier == .free
+                         ? "No free models located. Add a custom model ID below if you know one."
+                         : "No paid models in this catalog.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.muted)
+                    Spacer()
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 9).fill(Color.black.opacity(0.2)))
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(models) { model in
+                        discoveredRow(model)
+                        if model.id != models.last?.id {
+                            DividerLine().opacity(0.6)
+                        }
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.2)))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.stroke, lineWidth: 1))
+            }
+        }
+    }
+
+    private func discoveredRow(_ model: DiscoveredModel) -> some View {
+        let isSelected = selected.contains(model.id)
+        return Button {
+            if isSelected { selected.remove(model.id) } else { selected.insert(model.id) }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(isSelected ? Theme.accent : Theme.faint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.displayName)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        if let ctx = model.contextWindow {
+                            Text(Format.compact(ctx) + " ctx")
+                        }
+                        if let input = model.inputPerMillion, input > 0 {
+                            Text(Format.money(input) + "/M in")
+                        }
+                        if let note = model.note {
+                            Text(note)
+                        }
+                    }
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(Theme.faint)
+                    .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text(model.tier == .free ? "FREE" : model.tier == .paid ? "PAID" : "?")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundStyle(model.tier == .free ? Theme.green : Theme.muted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var customModelSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            FormLabel(title: "Add a custom model ID", hint: "For models the catalog scan missed or that the provider does not list.")
+            HStack(spacing: 8) {
+                FieldShell {
+                    TextField("model-id", text: $customModelID)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                }
+                FieldShell {
+                    TextField("128000", text: $customContext)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                        .frame(width: 90)
+                }
+                Button("Add") {
+                    addCustomModel()
+                }
+                .buttonStyle(GhostButtonStyle())
+                .disabled(customModelID.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private func addCustomModel() {
+        guard let providerID = connectedProviderID else { return }
+        let id = customModelID.trimmingCharacters(in: .whitespaces)
+        guard !id.isEmpty else { return }
+        let ctx = Int(customContext) ?? 128_000
+        store.addModel(
+            providerID: providerID,
+            modelID: id,
+            displayName: "",
+            contextWindow: max(1024, ctx),
+            inputPrice: kind.isLocal ? 0 : kind.defaultInputPrice,
+            outputPrice: kind.isLocal ? 0 : kind.defaultOutputPrice,
+            isFree: kind.isLocal
+        )
+        customModelID = ""
+        if !discovered.contains(where: { $0.modelID == id }) {
+            discovered.append(DiscoveredModel(modelID: id, tier: .unknown, note: "Added manually"))
+            selected.insert(id)
+        }
+        store.showToast("Custom model added", kind: .success)
+    }
+
+    private func connectAndScan() {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let url = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -301,16 +499,40 @@ struct AddProviderSheet: View {
         ) else {
             return
         }
-        dismiss()
+        connectedProviderID = provider.id
+        stage = .scanning
         Task {
-            await store.testProvider(provider)
+            let result = await ProviderClient.discoverModels(provider: provider, apiKey: key)
+            switch result {
+            case .success(let models):
+                discovered = models
+                // Preselect: free always; paid only when the current tier mode allows it.
+                selected = Set(models
+                    .filter { $0.tier == .free || (store.tierMode != .freeOnly && $0.tier == .paid) }
+                    .map { $0.modelID })
+                stage = .results
+                await store.testProvider(provider)
+            case .failure(let error):
+                store.showToast("Connected · catalog scan failed: \(error.message)", kind: .error)
+                dismiss()
+            }
         }
+    }
+
+    private func importSelected() {
+        guard let providerID = connectedProviderID else { return }
+        let chosen = discovered.filter { selected.contains($0.id) }
+        store.importDiscovered(providerID: providerID, models: chosen)
+        dismiss()
     }
 }
 
 struct AddModelSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+
+    /// Optional ID supplied by the Models search empty state.
+    var prefillModelID: String?
 
     @State private var providerID = ""
     @State private var modelID = ""
@@ -419,6 +641,12 @@ struct AddModelSheet: View {
             if providerID.isEmpty {
                 providerID = store.config.providers.first?.id ?? ""
             }
+            if modelID.isEmpty, let prefill = prefillModelID?.trimmingCharacters(in: .whitespacesAndNewlines), !prefill.isEmpty {
+                modelID = prefill
+            }
+        }
+        .onDisappear {
+            store.pendingModelID = nil
         }
     }
 

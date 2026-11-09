@@ -2,24 +2,6 @@ import AppKit
 import SwiftUI
 import WehniRouteCore
 
-private enum TraceFilter: String, CaseIterable, Identifiable {
-    case all = "All"
-    case success = "Success"
-    case fallback = "Fallback"
-    case failed = "Failed"
-
-    var id: String { rawValue }
-
-    func matches(_ trace: Trace) -> Bool {
-        switch self {
-        case .all: return true
-        case .success: return trace.isSuccess && !trace.fallbackUsed
-        case .fallback: return trace.fallbackUsed
-        case .failed: return !trace.isSuccess
-        }
-    }
-}
-
 private func traceStatusTint(_ status: Int) -> Color {
     if (200..<300).contains(status) { return Theme.green }
     if status >= 500 { return Theme.rose }
@@ -38,23 +20,7 @@ private func outcomeTint(_ outcome: AttemptOutcome) -> Color {
 
 struct TracesView: View {
     @EnvironmentObject private var store: AppStore
-    @State private var filter: TraceFilter = .all
-
-    private var filteredTraces: [Trace] {
-        let term = store.search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return store.traces.filter { trace in
-            guard filter.matches(trace) else { return false }
-            guard !term.isEmpty else { return true }
-            let haystack = [
-                trace.requestID,
-                trace.selectedProviderName ?? "",
-                trace.selectedModel ?? "",
-                trace.taskType.label,
-                trace.endpoint,
-            ].joined(separator: " ")
-            return haystack.localizedCaseInsensitiveContains(term)
-        }
-    }
+    @EnvironmentObject private var traces: TraceStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -64,7 +30,7 @@ struct TracesView: View {
                 subtitle: "Every gateway call records the classifier, candidate order, attempts, latency, tokens, and cost. Nothing is sampled away."
             ) {
                 HStack(spacing: 8) {
-                    Pill(text: "\(store.traces.count) RECORDS", tint: Theme.accent)
+                    Pill(text: "\(traces.traces.count) RECORDS", tint: Theme.accent)
                     Menu {
                         Button("Clear all records", role: .destructive) {
                             store.clearTraces()
@@ -91,8 +57,8 @@ struct TracesView: View {
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
-            if store.selectedTraceID == nil {
-                store.selectedTraceID = store.traces.first?.id
+            if traces.selectedTraceID == nil {
+                traces.selectedTraceID = traces.traces.first?.id
             }
         }
     }
@@ -100,7 +66,7 @@ struct TracesView: View {
     private var listCard: some View {
         GlassCard(padding: 0) {
             VStack(spacing: 0) {
-                Picker("Filter", selection: $filter) {
+                Picker("Filter", selection: $traces.filter) {
                     ForEach(TraceFilter.allCases) { option in
                         Text(option.rawValue).tag(option)
                     }
@@ -111,7 +77,7 @@ struct TracesView: View {
 
                 DividerLine()
 
-                if filteredTraces.isEmpty {
+                if traces.filteredTraces.isEmpty {
                     EmptyState(
                         symbol: "waveform.path.ecg",
                         title: "No matching decisions",
@@ -123,9 +89,13 @@ struct TracesView: View {
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         LazyVStack(spacing: 0) {
-                            ForEach(filteredTraces) { trace in
-                                TraceListRow(trace: trace)
-                                if trace.id != filteredTraces.last?.id {
+                            ForEach(traces.filteredTraces) { trace in
+                                TraceListRow(
+                                    trace: trace,
+                                    isSelected: traces.selectedTraceID == trace.id,
+                                    onSelect: { traces.selectedTraceID = trace.id }
+                                )
+                                if trace.id != traces.filteredTraces.last?.id {
                                     DividerLine().padding(.leading, 14)
                                 }
                             }
@@ -141,7 +111,7 @@ struct TracesView: View {
 
     private var inspectorCard: some View {
         GlassCard(padding: 0) {
-            if let trace = store.selectedTrace {
+            if let trace = traces.selectedTrace {
                 ScrollView(.vertical, showsIndicators: false) {
                     TraceDetail(trace: trace)
                         .padding(16)
@@ -161,17 +131,12 @@ struct TracesView: View {
 }
 
 private struct TraceListRow: View {
-    @EnvironmentObject private var store: AppStore
     let trace: Trace
-
-    private var selected: Bool {
-        store.selectedTraceID == trace.id
-    }
+    let isSelected: Bool
+    let onSelect: () -> Void
 
     var body: some View {
-        Button {
-            store.selectedTraceID = trace.id
-        } label: {
+        Button(action: onSelect) {
             HStack(alignment: .top, spacing: 9) {
                 Circle()
                     .fill(traceStatusTint(trace.status))
@@ -210,7 +175,7 @@ private struct TraceListRow: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(selected ? Theme.accent.opacity(0.065) : Color.clear)
+            .background(isSelected ? Theme.accent.opacity(0.065) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
