@@ -60,4 +60,22 @@ final class LocalEngineTests: XCTestCase {
             XCTAssertFalse(kind.rawValue.contains("-"), "\(kind.rawValue) must not contain hyphens")
         }
     }
+
+    func testParseCatalogTreatsEveryLocalEngineAsFreeLocal() {
+        let body: JSONValue = .object([
+            "data": .array([
+                .object(["id": .string("qwen2.5-7b-instruct"), "context_length": .num(32768)]),
+                .object(["id": .string("llama-3.2-1b")]),
+            ])
+        ])
+        for kind in [ProviderKind.jan, .koboldcpp, .vllm, .mlxlm, .tgi, .localai, .sglang, .litellm, .dockermodelrunner, .lemonade] {
+            let provider = ProviderConfig(kind: kind)
+            let parsed = ProviderClient.parseCatalogForTesting(body, provider: provider)
+            XCTAssertEqual(parsed.count, 2, "\(kind.rawValue) parses both entries")
+            XCTAssertTrue(parsed.allSatisfy { $0.tier == .free }, "\(kind.rawValue) models are free")
+            // parseCatalog sorts alphabetically, so look models up by ID.
+            XCTAssertEqual(parsed.first { $0.modelID == "qwen2.5-7b-instruct" }?.contextWindow, 32768, "\(kind.rawValue) honors context_length")
+            XCTAssertEqual(parsed.first { $0.modelID == "llama-3.2-1b" }?.contextWindow, kind.defaultContextWindow, "\(kind.rawValue) falls back to default context")
+        }
+    }
 }
