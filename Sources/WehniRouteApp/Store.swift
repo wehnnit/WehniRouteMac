@@ -97,6 +97,7 @@ private enum GatewayEndpoint: Sendable {
 final class AppStore: ObservableObject {
     @Published var config: AppConfig
     @Published var health: [String: HealthSnapshot]
+    @Published var modelHealth: [String: HealthSnapshot] = [:]
     @Published var section: AppSection = .overview
     @Published var gatewayStatus: GatewayStatus = .stopped
     @Published var toastMessage: Toast?
@@ -849,6 +850,7 @@ final class AppStore: ObservableObject {
     private struct RoutingSnapshot: Sendable {
         var config: AppConfig
         var health: [String: HealthSnapshot]
+        var modelHealth: [String: HealthSnapshot]
         var gatewayAPIKey: String
         var activeHarness: String?
         var harnessSessionStart: Date
@@ -863,6 +865,7 @@ final class AppStore: ObservableObject {
         return RoutingSnapshot(
             config: config,
             health: health,
+            modelHealth: modelHealth,
             gatewayAPIKey: gatewayAPIKey,
             activeHarness: harness,
             harnessSessionStart: sessionStart,
@@ -1032,6 +1035,7 @@ final class AppStore: ObservableObject {
         let ranking = Router.rank(
             config: snapshot.config,
             health: snapshot.health,
+            modelHealth: snapshot.modelHealth,
             estimatedInputTokens: estimated,
             task: task,
             requestedModel: requestedModel
@@ -1041,6 +1045,7 @@ final class AppStore: ObservableObject {
         // Health updates stay local until the single publish hop, so a request
         // never mutates @Published state mid-flight.
         var localHealth = snapshot.health
+        var localModelHealth = snapshot.modelHealth
         var consumedSimulation: String?
 
         var trace = Trace(
@@ -1064,6 +1069,8 @@ final class AppStore: ObservableObject {
                 trace: trace,
                 health: localHealth,
                 baseline: snapshot.health,
+                modelHealth: localModelHealth,
+                baselineModelHealth: snapshot.modelHealth,
                 consumedSimulation: consumedSimulation
             )
             return .error(503, message: "No eligible route: \(reason). Connect a provider or loosen the routing policy.")
@@ -1096,6 +1103,13 @@ final class AppStore: ObservableObject {
                 )
                 localHealth[provider.id] = Self.updatedHealthSnapshot(
                     localHealth[provider.id],
+                    success: false,
+                    latency: 0,
+                    message: detail
+                )
+                let modelKey = Self.modelHealthKey(providerID: provider.id, modelID: candidate.modelID)
+                localModelHealth[modelKey] = Self.updatedHealthSnapshot(
+                    localModelHealth[modelKey],
                     success: false,
                     latency: 0,
                     message: detail
@@ -1133,6 +1147,13 @@ final class AppStore: ObservableObject {
                     latency: latency,
                     message: nil
                 )
+                let modelKey = Self.modelHealthKey(providerID: provider.id, modelID: candidate.modelID)
+                localModelHealth[modelKey] = Self.updatedHealthSnapshot(
+                    localModelHealth[modelKey],
+                    success: true,
+                    latency: latency,
+                    message: nil
+                )
                 trace.attempts.append(
                     TraceAttempt(
                         providerID: provider.id,
@@ -1157,6 +1178,8 @@ final class AppStore: ObservableObject {
                     trace: trace,
                     health: localHealth,
                     baseline: snapshot.health,
+                    modelHealth: localModelHealth,
+                    baselineModelHealth: snapshot.modelHealth,
                     consumedSimulation: consumedSimulation
                 )
 
@@ -1181,6 +1204,13 @@ final class AppStore: ObservableObject {
                     latency: latency,
                     message: message
                 )
+                let modelKey = Self.modelHealthKey(providerID: provider.id, modelID: candidate.modelID)
+                localModelHealth[modelKey] = Self.updatedHealthSnapshot(
+                    localModelHealth[modelKey],
+                    success: false,
+                    latency: latency,
+                    message: message
+                )
                 trace.attempts.append(
                     TraceAttempt(
                         providerID: provider.id,
@@ -1198,6 +1228,13 @@ final class AppStore: ObservableObject {
             case .networkError(let message, let latency):
                 localHealth[provider.id] = Self.updatedHealthSnapshot(
                     localHealth[provider.id],
+                    success: false,
+                    latency: latency,
+                    message: message
+                )
+                let modelKey = Self.modelHealthKey(providerID: provider.id, modelID: candidate.modelID)
+                localModelHealth[modelKey] = Self.updatedHealthSnapshot(
+                    localModelHealth[modelKey],
                     success: false,
                     latency: latency,
                     message: message
@@ -1225,6 +1262,8 @@ final class AppStore: ObservableObject {
             trace: trace,
             health: localHealth,
             baseline: snapshot.health,
+            modelHealth: localModelHealth,
+            baselineModelHealth: snapshot.modelHealth,
             consumedSimulation: consumedSimulation
         )
         return .error(502, message: "All providers failed. \(lastFailure)")
@@ -1237,10 +1276,15 @@ final class AppStore: ObservableObject {
         trace: Trace,
         health updated: [String: HealthSnapshot],
         baseline: [String: HealthSnapshot],
+        modelHealth updatedModelHealth: [String: HealthSnapshot],
+        baselineModelHealth: [String: HealthSnapshot],
         consumedSimulation: String?
     ) {
         for (providerID, snapshot) in updated where baseline[providerID] != snapshot {
             health[providerID] = snapshot
+        }
+        for (key, snapshot) in updatedModelHealth where baselineModelHealth[key] != snapshot {
+            modelHealth[key] = snapshot
         }
         if let consumedSimulation {
             clearSimulationState(for: consumedSimulation)
@@ -1250,6 +1294,10 @@ final class AppStore: ObservableObject {
             }
         }
         record(trace)
+    }
+
+    private nonisolated static func modelHealthKey(providerID: String, modelID: String) -> String {
+        "\(providerID)/\(modelID)"
     }
 
     private nonisolated static func updatedHealthSnapshot(
